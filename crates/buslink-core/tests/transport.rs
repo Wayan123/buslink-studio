@@ -1,5 +1,5 @@
 //! Exchanger over FakeTransport and TcpTransport (Req 2, 4, 11).
-#![allow(clippy::unwrap_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::type_complexity)]
 
 use buslink_core::clock::{Clock, ManualClock, SystemClock};
 use buslink_core::protocol::pdu::{ExceptionCode, ReadData, ReadFunction, ReadRequest, decode_read_response};
@@ -37,7 +37,11 @@ fn soil_read_with_usb_fragmentation() {
     let clock = ManualClock::shared(1_000_000);
     let (mut t, h) = FakeTransport::scripted(
         clock.clone(),
-        vec![FakeReply::Bytes { data: regs_reply(1, &SOIL), delay_ms: 30, chunk: 3 }],
+        vec![FakeReply::Bytes {
+            data: regs_reply(1, &SOIL),
+            delay_ms: 30,
+            chunk: 3,
+        }],
     );
     let mut ex = rtu_exchanger(&clock);
     let req = soil_request();
@@ -45,7 +49,10 @@ fn soil_read_with_usb_fragmentation() {
     assert_eq!(hex(&rec.request), "01 03 00 00 00 08 44 0C");
     assert_eq!(h.writes()[0].1, unhex("01 03 00 00 00 08 44 0C"));
     let pdu = rec.outcome.unwrap();
-    assert_eq!(decode_read_response(&req, &pdu).unwrap(), ReadData::Registers(SOIL.to_vec()));
+    assert_eq!(
+        decode_read_response(&req, &pdu).unwrap(),
+        ReadData::Registers(SOIL.to_vec())
+    );
     assert_eq!(rec.response.len(), 21);
 }
 
@@ -70,7 +77,11 @@ fn inter_frame_gap_is_kept() {
     let end1 = r1.started_mono_ms + r1.elapsed_ms;
     ex.transact(&mut t, 1, Outgoing::Read(&soil_request()), 1000);
     let w = h.writes();
-    assert!(w[1].0 >= end1 + 5, "second request at {} must wait ≥ 5 ms after {end1}", w[1].0);
+    assert!(
+        w[1].0 >= end1 + 5,
+        "second request at {} must wait ≥ 5 ms after {end1}",
+        w[1].0
+    );
 }
 
 #[test]
@@ -98,7 +109,11 @@ fn late_reply_is_never_matched_to_the_next_request() {
     h.inject(late, 60);
     let r2 = ex.transact(&mut t, 1, Outgoing::Read(&req), 500);
     let data = decode_read_response(&req, &r2.outcome.unwrap()).unwrap();
-    assert_eq!(data, ReadData::Registers(SOIL.to_vec()), "the late reply must be discarded");
+    assert_eq!(
+        data,
+        ReadData::Registers(SOIL.to_vec()),
+        "the late reply must be discarded"
+    );
     assert_eq!(r2.discarded, 21);
 }
 
@@ -125,7 +140,13 @@ fn exception_bad_crc_and_wrong_unit() {
     assert!(matches!(e2, ExchangeError::Crc(_)));
     assert_eq!(e2.quality(), Quality::CrcError);
     let e3 = ex.transact(&mut t, 1, Outgoing::Read(&req), 500).outcome.unwrap_err();
-    assert_eq!(e3, ExchangeError::Decode(FrameError::WrongUnit { expected: 1, received: 7 }));
+    assert_eq!(
+        e3,
+        ExchangeError::Decode(FrameError::WrongUnit {
+            expected: 1,
+            received: 7
+        })
+    );
     assert_eq!(e3.quality(), Quality::DecodeError);
 }
 
@@ -135,7 +156,10 @@ fn disconnect_is_link_error() {
     let (mut t, h) = FakeTransport::scripted(clock.clone(), vec![FakeReply::Disconnect]);
     let mut ex = rtu_exchanger(&clock);
     let rec = ex.transact(&mut t, 1, Outgoing::Read(&soil_request()), 500);
-    assert!(matches!(rec.outcome, Err(ExchangeError::Link(TransportError::Disconnected(_)))));
+    assert!(matches!(
+        rec.outcome,
+        Err(ExchangeError::Link(TransportError::Disconnected(_)))
+    ));
     assert!(rec.outcome.unwrap_err().is_link_lost());
     assert!(h.write_count() == 1);
 }
@@ -158,13 +182,20 @@ fn mbap_matches_transaction_ids_and_discards_stale_frames() {
             // A stale reply for an older transaction arrives first, coalesced with ours.
             let mut data = mbap_reply(tid.wrapping_sub(1), 1, &[1, 1]);
             data.extend(mbap_reply(tid, 1, &[0x1234, 0x5678]));
-            FakeReply::Bytes { data, delay_ms: 2, chunk: 5 }
+            FakeReply::Bytes {
+                data,
+                delay_ms: 2,
+                chunk: 5,
+            }
         }),
     );
     let mut ex = Exchanger::new(Framing::Mbap, clock.clone() as Arc<dyn Clock>, 0);
     let req = ReadRequest::new(ReadFunction::HoldingRegisters, 10, 2).unwrap();
     let rec = ex.transact(&mut t, 1, Outgoing::Read(&req), 500);
-    assert_eq!(decode_read_response(&req, &rec.outcome.unwrap()).unwrap(), ReadData::Registers(vec![0x1234, 0x5678]));
+    assert_eq!(
+        decode_read_response(&req, &rec.outcome.unwrap()).unwrap(),
+        ReadData::Registers(vec![0x1234, 0x5678])
+    );
     assert_eq!(rec.discarded, 1);
     let rec2 = ex.transact(&mut t, 1, Outgoing::Read(&req), 500);
     assert!(rec2.outcome.is_ok());
@@ -203,7 +234,10 @@ fn tcp_client_against_loopback_server() {
     let mut ex = Exchanger::new(Framing::Mbap, SystemClock::shared(), 0);
     let req = ReadRequest::new(ReadFunction::HoldingRegisters, 0, 1).unwrap();
     let rec = ex.transact(&mut t, 1, Outgoing::Read(&req), 2000);
-    assert_eq!(decode_read_response(&req, &rec.outcome.unwrap()).unwrap(), ReadData::Registers(vec![42]));
+    assert_eq!(
+        decode_read_response(&req, &rec.outcome.unwrap()).unwrap(),
+        ReadData::Registers(vec![42])
+    );
     t.close();
     server.join().unwrap();
 }

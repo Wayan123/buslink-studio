@@ -113,7 +113,11 @@ impl MbapReceiver {
         }
         let pdu = self.buf[MBAP_HEADER_LEN..total].to_vec();
         self.buf.drain(..total);
-        Some(Ok(TcpFrame { transaction_id: header.transaction_id, unit_id: header.unit_id, pdu }))
+        Some(Ok(TcpFrame {
+            transaction_id: header.transaction_id,
+            unit_id: header.unit_id,
+            pdu,
+        }))
     }
 }
 
@@ -135,7 +139,10 @@ mod tests {
             let b = [0, 1, 0, 0, (len >> 8) as u8, len as u8, 1];
             assert_eq!(MbapHeader::parse(&b).is_ok(), ok, "length {len}");
         }
-        assert_eq!(MbapHeader::parse(&[0, 1, 0, 1, 0, 6, 1]), Err(FrameError::ProtocolId(1)));
+        assert_eq!(
+            MbapHeader::parse(&[0, 1, 0, 1, 0, 6, 1]),
+            Err(FrameError::ProtocolId(1))
+        );
     }
 
     #[test]
@@ -148,8 +155,22 @@ mod tests {
         r.push(&all[..3]);
         assert_eq!(r.next_frame(), None);
         r.push(&all[3..]);
-        assert_eq!(r.next_frame(), Some(Ok(TcpFrame { transaction_id: 1, unit_id: 1, pdu: vec![0x03, 2, 0, 5] })));
-        assert_eq!(r.next_frame(), Some(Ok(TcpFrame { transaction_id: 2, unit_id: 1, pdu: vec![0x83, 2] })));
+        assert_eq!(
+            r.next_frame(),
+            Some(Ok(TcpFrame {
+                transaction_id: 1,
+                unit_id: 1,
+                pdu: vec![0x03, 2, 0, 5]
+            }))
+        );
+        assert_eq!(
+            r.next_frame(),
+            Some(Ok(TcpFrame {
+                transaction_id: 2,
+                unit_id: 1,
+                pdu: vec![0x83, 2]
+            }))
+        );
         assert_eq!(r.next_frame(), None);
     }
 

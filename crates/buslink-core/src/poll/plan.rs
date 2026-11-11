@@ -16,21 +16,32 @@ pub struct PlanLimits {
 
 impl Default for PlanLimits {
     fn default() -> Self {
-        Self { max_registers: MAX_READ_REGISTERS, max_bits: MAX_READ_BITS, max_gap: 0 }
+        Self {
+            max_registers: MAX_READ_REGISTERS,
+            max_bits: MAX_READ_BITS,
+            max_gap: 0,
+        }
     }
 }
 
 impl PlanLimits {
     pub fn for_device(d: &DeviceInstance) -> Self {
         Self {
-            max_registers: d.max_registers_per_read.unwrap_or(MAX_READ_REGISTERS).clamp(1, MAX_READ_REGISTERS),
+            max_registers: d
+                .max_registers_per_read
+                .unwrap_or(MAX_READ_REGISTERS)
+                .clamp(1, MAX_READ_REGISTERS),
             max_bits: d.max_bits_per_read.unwrap_or(MAX_READ_BITS).clamp(1, MAX_READ_BITS),
             max_gap: d.max_gap,
         }
     }
 
     fn limit(&self, table: Table) -> u16 {
-        if table.is_bit() { self.max_bits } else { self.max_registers }
+        if table.is_bit() {
+            self.max_bits
+        } else {
+            self.max_registers
+        }
     }
 }
 
@@ -107,7 +118,11 @@ fn push_block(out: &mut Plan, profile: &Profile, table: Table, (s, e, tags): (u3
                 .into_iter()
                 .map(|i| {
                     let r = &profile.registers[i];
-                    BlockTag { register: i, offset: r.address - start, width: r.width() }
+                    BlockTag {
+                        register: i,
+                        offset: r.address - start,
+                        width: r.width(),
+                    }
                 })
                 .collect(),
         }),

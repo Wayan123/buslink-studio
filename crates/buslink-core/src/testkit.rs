@@ -23,7 +23,9 @@ fn env_u64(name: &str) -> Option<u64> {
 
 /// Number of cases to run: `BUSLINK_PBT_CASES` if set, else `default`.
 pub fn cases(default: u32) -> u32 {
-    env_u64("BUSLINK_PBT_CASES").map(|v| v.clamp(1, 10_000_000) as u32).unwrap_or(default)
+    env_u64("BUSLINK_PBT_CASES")
+        .map(|v| v.clamp(1, 10_000_000) as u32)
+        .unwrap_or(default)
 }
 
 /// Run a property `default_cases` times (or `BUSLINK_PBT_CASES`). Returns the number of cases run.
@@ -39,7 +41,9 @@ where
         let mut rng = SplitMix64::new(seed);
         let result = catch_unwind(AssertUnwindSafe(|| property(&mut rng)));
         if let Err(payload) = result {
-            eprintln!("property '{name}' failed at case {i}; replay with BUSLINK_PBT_SEED={seed:#x} BUSLINK_PBT_CASES=1");
+            eprintln!(
+                "property '{name}' failed at case {i}; replay with BUSLINK_PBT_SEED={seed:#x} BUSLINK_PBT_CASES=1"
+            );
             resume_unwind(payload);
         }
     }

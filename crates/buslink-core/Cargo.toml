@@ -16,3 +16,7 @@ rust_xlsxwriter.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+# Already in the tree through rust_xlsxwriter; used only to inspect exported workbooks.
+zip = { version = "=9.5.1", default-features = false, features = ["deflate"] }

@@ -93,7 +93,12 @@ impl WriteRequest {
                 out.extend_from_slice(&(values.len() as u16).to_be_bytes());
                 out.push(values.len().div_ceil(8) as u8);
                 for chunk in values.chunks(8) {
-                    out.push(chunk.iter().enumerate().fold(0u8, |b, (i, &v)| if v { b | (1 << i) } else { b }));
+                    out.push(
+                        chunk
+                            .iter()
+                            .enumerate()
+                            .fold(0u8, |b, (i, &v)| if v { b | (1 << i) } else { b }),
+                    );
                 }
             }
             WriteRequest::MultipleRegisters { values, .. } => {
@@ -112,9 +117,10 @@ impl WriteRequest {
         let (&fc, rest) = pdu.split_first().ok_or(PduError::Malformed("empty PDU"))?;
         if rest.len() < 4 {
             return match fc {
-                FC_WRITE_SINGLE_COIL | FC_WRITE_SINGLE_REGISTER | FC_WRITE_MULTIPLE_COILS | FC_WRITE_MULTIPLE_REGISTERS => {
-                    Err(PduError::Malformed("write request too short"))
-                }
+                FC_WRITE_SINGLE_COIL
+                | FC_WRITE_SINGLE_REGISTER
+                | FC_WRITE_MULTIPLE_COILS
+                | FC_WRITE_MULTIPLE_REGISTERS => Err(PduError::Malformed("write request too short")),
                 other => Err(PduError::UnsupportedFunction(other)),
             };
         }
@@ -178,7 +184,11 @@ impl WriteRequest {
 
     /// Client side: does `reply` acknowledge exactly this request?
     pub fn verify_echo(&self, reply: &[u8]) -> Result<(), FrameError> {
-        if reply == self.response_pdu().as_slice() { Ok(()) } else { Err(FrameError::BadEcho) }
+        if reply == self.response_pdu().as_slice() {
+            Ok(())
+        } else {
+            Err(FrameError::BadEcho)
+        }
     }
 }
 
@@ -197,39 +207,83 @@ mod tests {
             address: 19,
             values: vec![true, false, true, true, false, false, true, true, true, false],
         };
-        assert_eq!(mc.encode().unwrap(), vec![0x0F, 0x00, 0x13, 0x00, 0x0A, 0x02, 0xCD, 0x01]);
+        assert_eq!(
+            mc.encode().unwrap(),
+            vec![0x0F, 0x00, 0x13, 0x00, 0x0A, 0x02, 0xCD, 0x01]
+        );
         assert_eq!(mc.response_pdu(), vec![0x0F, 0x00, 0x13, 0x00, 0x0A]);
-        let mr = WriteRequest::MultipleRegisters { address: 1, values: vec![0x000A, 0x0102] };
-        assert_eq!(mr.encode().unwrap(), vec![0x10, 0x00, 0x01, 0x00, 0x02, 0x04, 0x00, 0x0A, 0x01, 0x02]);
+        let mr = WriteRequest::MultipleRegisters {
+            address: 1,
+            values: vec![0x000A, 0x0102],
+        };
+        assert_eq!(
+            mr.encode().unwrap(),
+            vec![0x10, 0x00, 0x01, 0x00, 0x02, 0x04, 0x00, 0x0A, 0x01, 0x02]
+        );
         assert_eq!(mr.response_pdu(), vec![0x10, 0x00, 0x01, 0x00, 0x02]);
     }
 
     #[test]
     fn limits() {
-        let too_many = WriteRequest::MultipleRegisters { address: 0, values: vec![0; 124] };
+        let too_many = WriteRequest::MultipleRegisters {
+            address: 0,
+            values: vec![0; 124],
+        };
         assert!(too_many.encode().is_err());
-        let ok = WriteRequest::MultipleRegisters { address: 0, values: vec![0; 123] };
+        let ok = WriteRequest::MultipleRegisters {
+            address: 0,
+            values: vec![0; 123],
+        };
         assert!(ok.encode().is_ok());
-        let past_end = WriteRequest::MultipleRegisters { address: 65_535, values: vec![0; 2] };
+        let past_end = WriteRequest::MultipleRegisters {
+            address: 65_535,
+            values: vec![0; 2],
+        };
         assert!(matches!(past_end.encode(), Err(PduError::AddressRange { .. })));
-        assert!(WriteRequest::MultipleCoils { address: 0, values: vec![] }.encode().is_err());
-        assert!(WriteRequest::MultipleCoils { address: 0, values: vec![true; 1969] }.encode().is_err());
+        assert!(
+            WriteRequest::MultipleCoils {
+                address: 0,
+                values: vec![]
+            }
+            .encode()
+            .is_err()
+        );
+        assert!(
+            WriteRequest::MultipleCoils {
+                address: 0,
+                values: vec![true; 1969]
+            }
+            .encode()
+            .is_err()
+        );
     }
 
     #[test]
     fn decode_rejects_bad_coil_value_and_counts() {
-        assert_eq!(WriteRequest::decode(&[0x05, 0, 1, 0x12, 0x34]), Err(PduError::Value("coil value must be 0xFF00 or 0x0000")));
+        assert_eq!(
+            WriteRequest::decode(&[0x05, 0, 1, 0x12, 0x34]),
+            Err(PduError::Value("coil value must be 0xFF00 or 0x0000"))
+        );
         assert!(WriteRequest::decode(&[0x10, 0, 1, 0, 2, 3, 0, 1, 0]).is_err());
         assert!(WriteRequest::decode(&[0x06, 0, 1]).is_err());
-        assert_eq!(WriteRequest::decode(&[0x2B, 0, 1, 0, 1]), Err(PduError::UnsupportedFunction(0x2B)));
+        assert_eq!(
+            WriteRequest::decode(&[0x2B, 0, 1, 0, 1]),
+            Err(PduError::UnsupportedFunction(0x2B))
+        );
     }
 
     #[test]
     fn echo_verification() {
-        let r = WriteRequest::SingleRegister { address: 1, value: 3000 };
+        let r = WriteRequest::SingleRegister {
+            address: 1,
+            value: 3000,
+        };
         assert!(r.verify_echo(&r.encode().unwrap()).is_ok());
         assert_eq!(r.verify_echo(&[0x06, 0, 1, 0, 0]), Err(FrameError::BadEcho));
-        let m = WriteRequest::MultipleRegisters { address: 4, values: vec![1, 2] };
+        let m = WriteRequest::MultipleRegisters {
+            address: 4,
+            values: vec![1, 2],
+        };
         assert!(m.verify_echo(&[0x10, 0, 4, 0, 2]).is_ok());
         assert!(m.verify_echo(&[0x10, 0, 4, 0, 3]).is_err());
     }

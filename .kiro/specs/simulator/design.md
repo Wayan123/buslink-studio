@@ -39,7 +39,7 @@ Writes: the server checks that every target address exists and is writable (exce
 
 ## 3. World and time
 
-`SimWorld::new(seed)`; `add_device(unit, model)`; each device gets its own `SplitMix64` seeded with `seed ^ (unit × golden ratio constant)`. `advance_to(now_ms)` runs `step(100 ms)` as many times as needed since the last step, so results do not depend on poll timing (Req 8.2). A device under the `stale` fault is not stepped (values frozen) but still answers.
+`SimWorld::new(seed)` or `SimWorld::training(seed)` (soil 1, VFD 2, temperature 3, meter 4); `add_device(unit, model)`; each device gets its own `SplitMix64` seeded with `seed ^ (unit × golden ratio constant)`. `advance_to(now_ms)` runs `step(100 ms)` as many times as needed since the last step, so results do not depend on poll timing (Req 8.2). A device under the `stale` fault is not stepped (values frozen) but still answers.
 
 `handle_pdu(unit, pdu, now_ms) -> Reply { pdu: Option<Vec<u8>>, delay_ms, corrupt: bool }`:
 1. Advance the world.
@@ -75,7 +75,7 @@ enum Trigger { Always, Probability { per_mille: u16 }, Window { from_ms, until_m
 struct FaultRule { unit: u8, kind: FaultKind, trigger: Trigger }
 ```
 
-Probability draws come from a dedicated fault RNG seeded from the world seed, so a fault sequence is reproducible. `Requests` counts requests per device.
+Probability draws come from a dedicated fault RNG seeded from the world seed, so a fault sequence is reproducible. Every probabilistic rule draws once per request to its unit, active or not. `Requests` counts requests per device. `Stale` needs a deterministic trigger (always, window, request count): it is evaluated while the process steps, where there is no request to draw for.
 
 "Stale" means frozen process values while communication stays GOOD (a gateway serving a cache). Client-side STALE quality comes from age, so it is produced by timeouts and backoff, not by this fault; the training material explains both.
 
@@ -87,12 +87,12 @@ Probability draws come from a dedicated fault RNG seeded from the world seed, so
 | S2 | Model state after N fixed steps does not depend on how `advance_to` calls were split | 8.2 | `tests/determinism.rs` |
 | S3 | Every register of every bundled sim profile reads and decodes GOOD from the simulator | 9.3 | `tests/profiles_match.rs` |
 | S4 | A rejected multi-write changes no register | 1.3 | `tests/server.rs` |
-| S5 | Each fault kind yields the expected client quality (TIMEOUT, CRC_ERROR, EXCEPTION(code), GOOD with frozen values, DECODE_ERROR or wrong values, TIMEOUT then the late reply discarded) | 7.1 | `tests/faults.rs` |
-| S6 | With the soil sensor dead, the VFD and meter on the same link keep their poll interval within the core fairness bound | 10.1 | `tests/multi_device.rs` |
-| S7 | VFD: run → ack, read-back verified, output ramps; fault → run acknowledged but not running; reset clears | 4.2, 4.3 | `tests/control.rs` |
-| S8 | Temperature PV converges toward SP in auto mode and never exceeds the physical bound | 5.2, 5.3 | `tests/control.rs` |
+| S5 | Each fault kind yields the expected client quality (TIMEOUT, CRC_ERROR, EXCEPTION(code), GOOD with frozen values, DECODE_ERROR or wrong values, TIMEOUT then the late reply discarded) | 7.1 | `tests/end_to_end.rs` |
+| S6 | With the soil sensor dead, the VFD and meter on the same link keep their poll interval within the core fairness bound | 10.1 | `tests/end_to_end.rs` |
+| S7 | VFD: run → ack, read-back verified, output ramps; fault → run acknowledged but not running; reset clears | 4.2, 4.3 | `tests/end_to_end.rs` |
+| S8 | Temperature PV converges toward SP in auto mode and never exceeds the physical bound | 5.2, 5.3 | `tests/models.rs` |
 | S9 | Energy counters never decrease | 6.2 | `tests/models.rs` |
-| S10 | P3 (core): command `wire` encodings are decoded by the simulator server and echoed correctly for FC05/06/15/16 | core 16.1 | `tests/write_round_trip.rs` |
+| S10 | P3 (core): command `wire` encodings are decoded by the simulator server and echoed correctly for FC05/06/15/16 (a test-only coil/register bank model covers FC05/15, which no bundled model uses) | core 16.1 | `tests/end_to_end.rs` |
 
 ## 8. Safety notes
 

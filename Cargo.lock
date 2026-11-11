@@ -24,6 +24,15 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tokio",
+ "zip",
+]
+
+[[package]]
+name = "buslink-sim"
+version = "0.1.0"
+dependencies = [
+ "buslink-core",
+ "thiserror",
 ]
 
 [[package]]

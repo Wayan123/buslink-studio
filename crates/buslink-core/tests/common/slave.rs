@@ -1,9 +1,11 @@
 //! A minimal multi-unit RTU slave for core tests (the full simulator lives in
 //! crates/buslink-sim, which core cannot depend on). Test code only.
-#![allow(dead_code, clippy::unwrap_used)]
+#![allow(dead_code, clippy::unwrap_used, clippy::panic, clippy::type_complexity)]
 
 use buslink_core::command::wire::WriteRequest;
-use buslink_core::protocol::pdu::{ExceptionCode, ReadData, ReadRequest, Table, encode_read_response, exception_response};
+use buslink_core::protocol::pdu::{
+    ExceptionCode, ReadData, ReadRequest, Table, encode_read_response, exception_response,
+};
 use buslink_core::protocol::rtu;
 use buslink_core::transport::fake::FakeReply;
 use std::collections::{BTreeMap, HashMap};
@@ -33,11 +35,19 @@ pub struct Bus {
 
 impl Bus {
     pub fn new() -> Self {
-        Self { units: Arc::default(), delay_ms: 10, chunk: 0 }
+        Self {
+            units: Arc::default(),
+            delay_ms: 10,
+            chunk: 0,
+        }
     }
 
     pub fn add(&self, unit: u8, holding: &[(u16, u16)]) {
-        let u = Unit { alive: true, holding: holding.iter().copied().collect(), ..Unit::default() };
+        let u = Unit {
+            alive: true,
+            holding: holding.iter().copied().collect(),
+            ..Unit::default()
+        };
         self.units.lock().unwrap().insert(unit, u);
     }
 
@@ -55,13 +65,21 @@ impl Bus {
     }
 
     fn reply(&self, unit: u8, pdu: Vec<u8>) -> FakeReply {
-        FakeReply::Bytes { data: rtu::encode_adu(unit, &pdu).unwrap(), delay_ms: self.delay_ms, chunk: self.chunk }
+        FakeReply::Bytes {
+            data: rtu::encode_adu(unit, &pdu).unwrap(),
+            delay_ms: self.delay_ms,
+            chunk: self.chunk,
+        }
     }
 
     pub fn answer(&self, adu: &[u8]) -> FakeReply {
-        let Ok((unit, pdu)) = rtu::decode_adu(adu) else { return FakeReply::Silence };
+        let Ok((unit, pdu)) = rtu::decode_adu(adu) else {
+            return FakeReply::Silence;
+        };
         let mut units = self.units.lock().unwrap();
-        let Some(u) = units.get_mut(&unit) else { return FakeReply::Silence };
+        let Some(u) = units.get_mut(&unit) else {
+            return FakeReply::Silence;
+        };
         if !u.alive {
             return FakeReply::Silence;
         }
@@ -70,7 +88,11 @@ impl Bus {
             let addrs = req.address()..=req.end_address();
             let data = match req.table() {
                 Table::HoldingRegister | Table::InputRegister => {
-                    let map = if req.table() == Table::HoldingRegister { &u.holding } else { &u.input };
+                    let map = if req.table() == Table::HoldingRegister {
+                        &u.holding
+                    } else {
+                        &u.input
+                    };
                     let regs: Option<Vec<u16>> = addrs.map(|a| map.get(&a).copied()).collect();
                     regs.map(ReadData::Registers)
                 }

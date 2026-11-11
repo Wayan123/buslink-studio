@@ -84,3 +84,17 @@ find profiles -name '*.json' -exec python3 tools/hooks/check_profile.py {} +
 ```
 
 The `profile-schema-check` hook runs the same check when a file under `profiles/` is saved.
+
+Three validators implement this page and must stay in step:
+
+- `profiles/schema/buslink-profile.schema.json` (JSON Schema 2020-12) covers structure, enums and ranges, for editors. Files under `profiles/schema/` are not profiles and the hook skips them.
+- `tools/hooks/check_profile.py` (hook, stdlib only). `--json` prints one JSON verdict per file.
+- `crates/buslink-core/src/profile/validate.rs`, used by the app when loading a profile. `crates/buslink-core/tests/profile_agreement.rs` checks that it gives the same verdict and the same error and warning paths as the Python script, on the bundled profiles, the fixtures in `crates/buslink-core/tests/fixtures/profiles/` and several hundred mutated documents.
+
+Strictness rules added with the Rust validator (2026-11-12), applied by both:
+
+- `null` is never a value: omit the key instead.
+- Enum values are type-strict: `8.0` is not `8` and `true` is not `1`.
+- IDs, versions, dates, bit indexes and baud codes are matched over the whole string, ASCII only (so `"1.0.0\n"` and non-ASCII digits are rejected).
+- `NaN` and `Infinity` are not JSON; integers must fit in 64 bits.
+- `$schema` and `$comment` must be strings; command `expected` must be a number; `source.publisher` and evidence `firmware` and `notes` are checked as text.

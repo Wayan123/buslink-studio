@@ -84,7 +84,9 @@ impl J {
                     Value::Null
                 }
             }
-            J::Float(f) => serde_json::Number::from_f64(*f).map(Value::Number).unwrap_or(Value::Null),
+            J::Float(f) => serde_json::Number::from_f64(*f)
+                .map(Value::Number)
+                .unwrap_or(Value::Null),
             J::Str(s) => Value::String(s.clone()),
             J::Arr(a) => Value::Array(a.iter().map(J::to_value).collect()),
             J::Obj(m) => Value::Object(m.iter().map(|(k, v)| (k.clone(), v.to_value())).collect()),
@@ -174,7 +176,11 @@ mod tests {
         assert!(parse(br#"{"a": 1, "a": 2}"#).unwrap_err().contains("duplicate key"));
         assert!(parse(br#"{"a": {"b": 1, "b": 1}}"#).is_err());
         assert!(parse(br#"{"a": NaN}"#).is_err());
-        assert!(parse(&vec![b' '; MAX_PROFILE_BYTES + 1]).unwrap_err().contains("larger"));
+        assert!(
+            parse(&vec![b' '; MAX_PROFILE_BYTES + 1])
+                .unwrap_err()
+                .contains("larger")
+        );
         assert!(parse(&[0xFF, 0xFE]).is_err());
     }
 }

@@ -79,7 +79,9 @@ enum Outgoing<'a> { Read(&'a ReadRequest), Command(&'a PreparedFrame) }
 Exchanger::transact(&mut self, t: &mut dyn Transport, unit, Outgoing, timeout_ms) -> ExchangeRecord
 ```
 
-There is no "send arbitrary PDU" entry point: the only sources of bytes are a validated `ReadRequest` or a `PreparedFrame`, which only `command/` can construct. `ExchangeRecord` keeps the request ADU, every received byte, timings and `Result<reply_pdu, ExchangeError>` for the register inspector and the audit log. `ExchangeError` = `Timeout | Crc | Exception{function, code} | Decode(FrameError) | Link(TransportError)` and maps 1:1 to quality.
+There is no "send arbitrary PDU" entry point: the only sources of bytes are a validated `ReadRequest` or a `PreparedFrame`, which only `command/` can construct. `ExchangeRecord` keeps the request ADU, every received byte, timings and `Result<reply_pdu, ExchangeError>` for the register inspector and the audit log.
+
+Late RTU replies: RTU has no transaction ID. After a timeout, the next request first drains the line until it has been quiet for `DEFAULT_LATE_GUARD_MS` (200 ms), so a reply that arrives after the timeout is discarded and never matched to the next request. A reply later than that guard can only be caught when its unit, function or length differ; this limit is accepted and documented in `exchange.rs`. `ExchangeError` = `Timeout | Crc | Exception{function, code} | Decode(FrameError) | Link(TransportError)` and maps 1:1 to quality.
 
 ## 3. Codec
 
@@ -134,15 +136,17 @@ States: `Idle → Armed → Previewed → Confirmed → Sent → ReadBack → Do
 - `confirm(preview_id)`: must match the current preview; moves the plan into `Confirmed`; audit `confirm` (an audit failure returns to Armed and nothing is sent).
 - `execute(link)`: takes the plan out of `Confirmed` (state becomes `Sent` before any I/O), audits `sent` (failure → Failed, no send), sends the `PreparedFrame` once, verifies the echo, reads back, audits `readback`, ends in `Done` (acknowledged) or `Failed` (exception, timeout, bad echo, CRC, link lost). Link lost also disarms.
 - `PreparedFrame` has private fields, no `Clone`, and is consumed by `CommandLink::send`, so the type system prevents sending the same confirmation twice.
+- A frame that the worker could not transmit (link already down) comes back with an empty request and is reported as `Ack::NotSent`; any other link loss after sending is `Ack::LinkLost` (effect unknown). Both disarm.
+- Old values and read-back values are decoded without the `valid_range` check, so an out-of-range state is still shown instead of hidden.
 - `CommandOutcome { ack, readback: Verified | Mismatch | Unknown, readback_value, request_hex, response_hex }` keeps acknowledgement and read-back apart (Req 16.9).
 
 ## 9. Historian
 
-SQLite with `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON`. Tables: `sessions`, `devices`, `tags`, `samples(tag, ts_ms, value_ts_ms, ts_src_ms, seq, raw BLOB, value REAL, text, quality INT, exception INT, age_ms)`, `events`, `command_audit` (triggers `RAISE(ABORT)` on UPDATE and DELETE), `outbox` (table only; logic in E7), `samples_1m(tag, minute, n, min, max, sum)`. Quality codes: GOOD 0, TIMEOUT 1, CRC_ERROR 2, EXCEPTION 3, STALE 4, DECODE_ERROR 5, DISCONNECTED 6. `LogDecimator` stores a sample when its quality differs from the last stored one or when `ts − last_stored ≥ logging interval`. `rollup_until(ts)` recomputes complete minutes from GOOD rows.
+SQLite with `journal_mode=WAL`, `synchronous=NORMAL`, `foreign_keys=ON`. Tables: `sessions`, `devices`, `tags`, `samples(tag, ts_ms, value_ts_ms, ts_src_ms, seq, raw BLOB, raw_value TEXT, value REAL, text, quality INT, exception INT, age_ms)` (`raw` = registers as big-endian bytes; `raw_value` = the exact decoded raw value as digits, so 64-bit integers survive; both NULL-safe), `events`, `command_audit` (triggers `RAISE(ABORT)` on UPDATE and DELETE), `outbox` (table only; logic in E7), `samples_1m(tag, minute, n, min, max, sum)`. Quality codes: GOOD 0, TIMEOUT 1, CRC_ERROR 2, EXCEPTION 3, STALE 4, DECODE_ERROR 5, DISCONNECTED 6. `LogDecimator` stores a sample when its quality differs from the last stored one or when `ts − last_stored ≥ logging interval`. `rollup_until(ts)` recomputes complete minutes from GOOD rows.
 
 ## 10. Export
 
-`ExportDoc { generated_ms, app_version, sessions, devices, measurements, events, commands }` is built from the historian. CSV columns: `ts_utc, ts_ms, device_id, tag_id, value, text, unit, quality, exception_code, age_ms, value_ts_utc, raw_hex, seq, profile_id, profile_version`. `guard_text` applies the formula guard to every text cell in CSV and XLSX. JSON uses strings for 64-bit integers and never emits NaN.
+`ExportDoc { generated_ms, app_version, session, devices, measurements, events, commands }` (one session per export) is built from the historian. CSV columns: `ts_utc, ts_ms, device_id, tag_id, value, text, unit, quality, exception_code, age_ms, value_ts_utc, raw_hex, seq, profile_id, profile_version`. `guard_text` applies the formula guard to every text cell in CSV and XLSX. JSON uses strings for 64-bit integers and never emits NaN.
 
 ## 11. Correctness properties
 
@@ -173,7 +177,9 @@ Choice: a dependency-free seeded generator (`rng::SplitMix64` + `testkit::check`
 - Failures print the seed and case index; `BUSLINK_PBT_SEED` and `BUSLINK_PBT_CASES` reproduce or deepen a run.
 - Trade-off accepted: no automatic shrinking. Generators are kept small (short frames, few devices) so failing cases stay readable.
 
-Default case counts are listed in `tasks.md` and the run report.
+Default case counts are listed in `tasks.md` and the run report. Each property's seed is `0xB0511AC2026 ^ fnv1a(property name) ^ (case × 0x9E3779B97F4A7C15)`, so every run is reproducible without configuration.
+
+Integration tests compare the Rust profile validator against the Python one with `python3`; the comparison is skipped with a message if `python3` is missing. XLSX tests read the workbook with `zip` 9.5.1, already in the tree through rust_xlsxwriter, added as a dev-dependency only.
 
 ## 13. Error handling
 

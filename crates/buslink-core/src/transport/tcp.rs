@@ -26,7 +26,9 @@ impl TcpTransport {
     /// Connect with a timeout. `host` may be an IP literal or a name.
     pub fn connect(host: &str, port: u16, timeout_ms: u64) -> Result<TcpTransport, TransportError> {
         let peer = format!("{host}:{port}");
-        let addrs = (host, port).to_socket_addrs().map_err(|e| TransportError::Io(format!("{peer}: {e}")))?;
+        let addrs = (host, port)
+            .to_socket_addrs()
+            .map_err(|e| TransportError::Io(format!("{peer}: {e}")))?;
         let timeout = Duration::from_millis(timeout_ms.max(1));
         let mut last = TransportError::Io(format!("{peer}: no address"));
         for addr in addrs {
@@ -59,7 +61,14 @@ impl Transport for TcpTransport {
         match self.stream.read(buf) {
             Ok(0) if !buf.is_empty() => Err(TransportError::Disconnected(format!("{}: closed by peer", self.peer))),
             Ok(n) => Ok(n),
-            Err(e) if matches!(e.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut | ErrorKind::Interrupted) => Ok(0),
+            Err(e)
+                if matches!(
+                    e.kind(),
+                    ErrorKind::WouldBlock | ErrorKind::TimedOut | ErrorKind::Interrupted
+                ) =>
+            {
+                Ok(0)
+            }
             Err(e) => Err(map_err(e, &self.peer)),
         }
     }

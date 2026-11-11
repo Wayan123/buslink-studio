@@ -24,7 +24,12 @@ pub enum Table {
 }
 
 impl Table {
-    pub const ALL: [Table; 4] = [Table::Coil, Table::DiscreteInput, Table::InputRegister, Table::HoldingRegister];
+    pub const ALL: [Table; 4] = [
+        Table::Coil,
+        Table::DiscreteInput,
+        Table::InputRegister,
+        Table::HoldingRegister,
+    ];
 
     pub fn is_bit(self) -> bool {
         matches!(self, Table::Coil | Table::DiscreteInput)
@@ -67,7 +72,11 @@ impl Table {
             Table::HoldingRegister => 4,
         };
         let n = u32::from(offset) + 1;
-        if n <= 9999 { format!("{prefix}{n:04}") } else { format!("{prefix}{n:05}") }
+        if n <= 9999 {
+            format!("{prefix}{n:04}")
+        } else {
+            format!("{prefix}{n:05}")
+        }
     }
 }
 
@@ -81,8 +90,12 @@ pub enum ReadFunction {
 }
 
 impl ReadFunction {
-    pub const ALL: [ReadFunction; 4] =
-        [ReadFunction::Coils, ReadFunction::DiscreteInputs, ReadFunction::HoldingRegisters, ReadFunction::InputRegisters];
+    pub const ALL: [ReadFunction; 4] = [
+        ReadFunction::Coils,
+        ReadFunction::DiscreteInputs,
+        ReadFunction::HoldingRegisters,
+        ReadFunction::InputRegisters,
+    ];
 
     pub fn code(self) -> u8 {
         match self {
@@ -111,7 +124,11 @@ impl ReadFunction {
     }
 
     pub fn max_quantity(self) -> u16 {
-        if self.is_bit() { MAX_READ_BITS } else { MAX_READ_REGISTERS }
+        if self.is_bit() {
+            MAX_READ_BITS
+        } else {
+            MAX_READ_REGISTERS
+        }
     }
 
     pub fn name(self) -> &'static str {
@@ -150,7 +167,11 @@ impl ReadRequest {
         if u32::from(address) + u32::from(quantity) > 65_536 {
             return Err(PduError::AddressRange { address, quantity });
         }
-        Ok(Self { function, address, quantity })
+        Ok(Self {
+            function,
+            address,
+            quantity,
+        })
     }
 
     pub fn for_table(table: Table, address: u16, quantity: u16) -> Result<Self, PduError> {
@@ -277,17 +298,29 @@ pub fn decode_read_response(req: &ReadRequest, pdu: &[u8]) -> Result<ReadData, R
         return Err(ReplyError::Frame(FrameError::EmptyPdu));
     };
     if received != fc {
-        return Err(ReplyError::Frame(FrameError::UnexpectedFunction { expected: fc, received }));
+        return Err(ReplyError::Frame(FrameError::UnexpectedFunction {
+            expected: fc,
+            received,
+        }));
     }
     let expected = req.response_byte_count();
     let Some(&count) = pdu.get(1) else {
-        return Err(ReplyError::Frame(FrameError::Length { expected: expected + 2, received: pdu.len() }));
+        return Err(ReplyError::Frame(FrameError::Length {
+            expected: expected + 2,
+            received: pdu.len(),
+        }));
     };
     if usize::from(count) != expected {
-        return Err(ReplyError::Frame(FrameError::ByteCount { expected, received: usize::from(count) }));
+        return Err(ReplyError::Frame(FrameError::ByteCount {
+            expected,
+            received: usize::from(count),
+        }));
     }
     if pdu.len() != 2 + expected {
-        return Err(ReplyError::Frame(FrameError::Length { expected: expected + 2, received: pdu.len() }));
+        return Err(ReplyError::Frame(FrameError::Length {
+            expected: expected + 2,
+            received: pdu.len(),
+        }));
     }
     let data = &pdu[2..];
     let q = usize::from(req.quantity());
@@ -295,7 +328,9 @@ pub fn decode_read_response(req: &ReadRequest, pdu: &[u8]) -> Result<ReadData, R
         let bits = (0..q).map(|i| data[i / 8] & (1 << (i % 8)) != 0).collect();
         Ok(ReadData::Bits(bits))
     } else {
-        Ok(ReadData::Registers(data.chunks_exact(2).map(|c| u16::from_be_bytes([c[0], c[1]])).collect()))
+        Ok(ReadData::Registers(
+            data.chunks_exact(2).map(|c| u16::from_be_bytes([c[0], c[1]])).collect(),
+        ))
     }
 }
 
@@ -367,14 +402,23 @@ mod tests {
         let h = ReadFunction::HoldingRegisters;
         assert!(ReadRequest::new(h, 0, 0).is_err());
         assert!(ReadRequest::new(h, 0, 125).is_ok());
-        assert_eq!(ReadRequest::new(h, 0, 126), Err(PduError::Quantity { quantity: 126, max: 125 }));
+        assert_eq!(
+            ReadRequest::new(h, 0, 126),
+            Err(PduError::Quantity {
+                quantity: 126,
+                max: 125
+            })
+        );
         let c = ReadFunction::Coils;
         assert!(ReadRequest::new(c, 0, 2000).is_ok());
         assert!(ReadRequest::new(c, 0, 2001).is_err());
         assert!(ReadRequest::new(h, 65_535 - 9, 10).is_ok()); // ends at 65535: sum 65536
         assert_eq!(
             ReadRequest::new(h, 65_535 - 8, 10),
-            Err(PduError::AddressRange { address: 65_527, quantity: 10 })
+            Err(PduError::AddressRange {
+                address: 65_527,
+                quantity: 10
+            })
         );
         assert_eq!(ReadRequest::new(h, 65_526, 10).map(|r| r.end_address()), Ok(65_535));
     }
@@ -399,20 +443,29 @@ mod tests {
     #[test]
     fn register_response_and_errors() {
         let r = ReadRequest::new(ReadFunction::InputRegisters, 8, 1).unwrap();
-        assert_eq!(decode_read_response(&r, &[0x04, 0x02, 0x00, 0x0A]), Ok(ReadData::Registers(vec![10])));
+        assert_eq!(
+            decode_read_response(&r, &[0x04, 0x02, 0x00, 0x0A]),
+            Ok(ReadData::Registers(vec![10]))
+        );
         assert_eq!(
             decode_read_response(&r, &[0x84, 0x02]),
             Err(ReplyError::Exception(ExceptionCode::ILLEGAL_DATA_ADDRESS))
         );
         assert!(matches!(
             decode_read_response(&r, &[0x04, 0x04, 0, 1, 0, 2]),
-            Err(ReplyError::Frame(FrameError::ByteCount { expected: 2, received: 4 }))
+            Err(ReplyError::Frame(FrameError::ByteCount {
+                expected: 2,
+                received: 4
+            }))
         ));
         assert!(matches!(
             decode_read_response(&r, &[0x03, 0x02, 0, 1]),
             Err(ReplyError::Frame(FrameError::UnexpectedFunction { .. }))
         ));
-        assert!(matches!(decode_read_response(&r, &[0x04, 0x02, 0]), Err(ReplyError::Frame(FrameError::Length { .. }))));
+        assert!(matches!(
+            decode_read_response(&r, &[0x04, 0x02, 0]),
+            Err(ReplyError::Frame(FrameError::Length { .. }))
+        ));
         assert!(decode_read_response(&r, &[]).is_err());
     }
 
@@ -428,8 +481,14 @@ mod tests {
 
     #[test]
     fn decode_request_errors_map_to_exceptions() {
-        assert_eq!(ReadRequest::decode(&[0x2B]).unwrap_err().exception(), ExceptionCode::ILLEGAL_FUNCTION);
-        assert_eq!(ReadRequest::decode(&[0x03, 0, 0, 0, 0]).unwrap_err().exception(), ExceptionCode::ILLEGAL_DATA_VALUE);
+        assert_eq!(
+            ReadRequest::decode(&[0x2B]).unwrap_err().exception(),
+            ExceptionCode::ILLEGAL_FUNCTION
+        );
+        assert_eq!(
+            ReadRequest::decode(&[0x03, 0, 0, 0, 0]).unwrap_err().exception(),
+            ExceptionCode::ILLEGAL_DATA_VALUE
+        );
         assert_eq!(
             ReadRequest::decode(&[0x03, 0xFF, 0xFF, 0, 2]).unwrap_err().exception(),
             ExceptionCode::ILLEGAL_DATA_ADDRESS

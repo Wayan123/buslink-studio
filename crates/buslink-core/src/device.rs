@@ -17,7 +17,11 @@ pub enum LinkKind {
     /// Modbus TCP (MBAP).
     Tcp { host: String, port: u16 },
     /// Raw RTU frames (with CRC) through a transparent serial server. Not MBAP.
-    RtuOverTcp { host: String, port: u16, serial: SerialSettings },
+    RtuOverTcp {
+        host: String,
+        port: u16,
+        serial: SerialSettings,
+    },
     /// In-process simulator bus.
     Simulator { name: String, serial: SerialSettings },
 }
@@ -140,9 +144,17 @@ impl DeviceInstance {
     /// A device using the profile's defaults for the given link kind.
     pub fn from_profile(id: &str, name: &str, link: &LinkConfig, profile: &Profile) -> DeviceInstance {
         let unit_id = if link.uses_rtu_framing() {
-            profile.transport.rtu.map(|r| r.unit_id).or(profile.transport.tcp.map(|t| t.unit_id))
+            profile
+                .transport
+                .rtu
+                .map(|r| r.unit_id)
+                .or(profile.transport.tcp.map(|t| t.unit_id))
         } else {
-            profile.transport.tcp.map(|t| t.unit_id).or(profile.transport.rtu.map(|r| r.unit_id))
+            profile
+                .transport
+                .tcp
+                .map(|t| t.unit_id)
+                .or(profile.transport.rtu.map(|r| r.unit_id))
         };
         DeviceInstance {
             id: id.to_owned(),
@@ -163,7 +175,10 @@ impl DeviceInstance {
 
     pub fn check(&self, profile: &Profile, link: &LinkConfig) -> Result<(), DeviceError> {
         let id_ok = (1..=64).contains(&self.id.len())
-            && self.id.bytes().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, b'-' | b'_' | b'.'));
+            && self
+                .id
+                .bytes()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, b'-' | b'_' | b'.'));
         if !id_ok {
             return Err(DeviceError::Id);
         }
@@ -171,7 +186,10 @@ impl DeviceInstance {
             return Err(DeviceError::UnitZero);
         }
         if self.unit_id > link.max_unit_id() {
-            return Err(DeviceError::UnitRange { unit: self.unit_id, max: link.max_unit_id() });
+            return Err(DeviceError::UnitRange {
+                unit: self.unit_id,
+                max: link.max_unit_id(),
+            });
         }
         if self.profile_id != profile.profile_id || self.profile_version != profile.profile_version {
             return Err(DeviceError::ProfileMismatch {
@@ -180,7 +198,10 @@ impl DeviceInstance {
             });
         }
         if self.link_id != link.id {
-            return Err(DeviceError::LinkMismatch { expected: self.link_id.clone(), got: link.id.clone() });
+            return Err(DeviceError::LinkMismatch {
+                expected: self.link_id.clone(),
+                got: link.id.clone(),
+            });
         }
         if !(MIN_POLL_INTERVAL_MS..=MAX_POLL_INTERVAL_MS).contains(&self.poll_interval_ms) {
             return Err(DeviceError::PollInterval(self.poll_interval_ms));
@@ -202,7 +223,8 @@ impl DeviceInstance {
     }
 
     pub fn stale_threshold_ms(&self) -> u64 {
-        self.stale_after_ms.unwrap_or_else(|| self.poll_interval_ms.saturating_mul(3).max(3000))
+        self.stale_after_ms
+            .unwrap_or_else(|| self.poll_interval_ms.saturating_mul(3).max(3000))
     }
 
     /// Instance setting, else profile default for the link kind, else derived from the serial settings.

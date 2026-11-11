@@ -104,7 +104,10 @@ impl AuditSink for MemoryAudit {
         if *self.fail.lock().unwrap_or_else(|e| e.into_inner()) {
             return Err(AuditError("simulated storage failure".into()));
         }
-        self.records.lock().unwrap_or_else(|e| e.into_inner()).push(record.clone());
+        self.records
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(record.clone());
         Ok(())
     }
 }

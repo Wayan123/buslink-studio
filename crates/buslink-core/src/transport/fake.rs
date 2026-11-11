@@ -20,7 +20,11 @@ pub enum FakeReply {
 
 impl FakeReply {
     pub fn now(data: Vec<u8>) -> Self {
-        FakeReply::Bytes { data, delay_ms: 5, chunk: 0 }
+        FakeReply::Bytes {
+            data,
+            delay_ms: 5,
+            chunk: 0,
+        }
     }
 }
 
@@ -29,7 +33,11 @@ pub type Responder = Box<dyn FnMut(&[u8]) -> FakeReply + Send>;
 impl State {
     /// Bytes are delivered in time order, as on a real line.
     fn queue(&mut self, at: u64, data: Vec<u8>) {
-        let pos = self.pending.iter().position(|(t, _)| *t > at).unwrap_or(self.pending.len());
+        let pos = self
+            .pending
+            .iter()
+            .position(|(t, _)| *t > at)
+            .unwrap_or(self.pending.len());
         self.pending.insert(pos, (at, data));
     }
 }
@@ -63,13 +71,22 @@ impl FakeTransport {
             disconnected: false,
             drained: 0,
         }));
-        (FakeTransport { clock: Arc::clone(&clock), state: Arc::clone(&state) }, FakeHandle { clock, state })
+        (
+            FakeTransport {
+                clock: Arc::clone(&clock),
+                state: Arc::clone(&state),
+            },
+            FakeHandle { clock, state },
+        )
     }
 
     /// Replies in order; silence once the script is exhausted.
     pub fn scripted(clock: Arc<ManualClock>, replies: Vec<FakeReply>) -> (FakeTransport, FakeHandle) {
         let mut queue: VecDeque<FakeReply> = replies.into();
-        Self::new(clock, Box::new(move |_| queue.pop_front().unwrap_or(FakeReply::Silence)))
+        Self::new(
+            clock,
+            Box::new(move |_| queue.pop_front().unwrap_or(FakeReply::Silence)),
+        )
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, State> {
@@ -146,7 +163,9 @@ impl Transport for FakeTransport {
         match ready_at {
             Some(at) if at <= now.saturating_add(timeout_ms) => {
                 self.clock.advance_to(at);
-                let Some((at, mut data)) = st.pending.pop_front() else { return Ok(0) };
+                let Some((at, mut data)) = st.pending.pop_front() else {
+                    return Ok(0);
+                };
                 let n = data.len().min(buf.len());
                 buf[..n].copy_from_slice(&data[..n]);
                 if n < data.len() {

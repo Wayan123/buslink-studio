@@ -16,8 +16,8 @@ use crate::profile::Profile;
 use crate::protocol::pdu::{ReadData, ReadRequest, ReplyError, decode_read_response};
 use crate::quality::{Observation, Quality, Sample, TagIdentity, TagState, Value};
 use crate::transport::Transport;
-use crate::transport::exchange::{ExchangeError, ExchangeRecord, Exchanger, Framing, Outgoing};
 use crate::transport::TransportError;
+use crate::transport::exchange::{ExchangeError, ExchangeRecord, Exchanger, Framing, Outgoing};
 use serde::Serialize;
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -35,8 +35,18 @@ pub type Reply<T> = Box<dyn FnOnce(T) + Send>;
 
 /// Work that jumps the polling queue.
 pub enum UrgentJob {
-    Read { unit: u8, request: ReadRequest, priority: Priority, timeout_ms: u64, reply: Reply<Result<ReadData, ExchangeError>> },
-    Command { frame: PreparedFrame, timeout_ms: u64, reply: Reply<ExchangeRecord> },
+    Read {
+        unit: u8,
+        request: ReadRequest,
+        priority: Priority,
+        timeout_ms: u64,
+        reply: Reply<Result<ReadData, ExchangeError>>,
+    },
+    Command {
+        frame: PreparedFrame,
+        timeout_ms: u64,
+        reply: Reply<ExchangeRecord>,
+    },
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
@@ -117,12 +127,18 @@ impl LinkScheduler {
         devices: Vec<(DeviceInstance, Arc<Profile>)>,
         clock: Arc<dyn Clock>,
     ) -> Result<Self, SchedulerError> {
-        let framing = if link.uses_rtu_framing() { Framing::Rtu } else { Framing::Mbap };
+        let framing = if link.uses_rtu_framing() {
+            Framing::Rtu
+        } else {
+            Framing::Mbap
+        };
         let exchanger = Exchanger::new(framing, Arc::clone(&clock), link.inter_frame_ms());
         let now = clock.mono_ms();
         let mut out: Vec<PollDevice> = Vec::new();
         for (instance, profile) in devices {
-            instance.check(&profile, &link).map_err(|e| SchedulerError::Device(instance.id.clone(), e))?;
+            instance
+                .check(&profile, &link)
+                .map_err(|e| SchedulerError::Device(instance.id.clone(), e))?;
             if out.iter().any(|d| d.instance.id == instance.id) {
                 return Err(SchedulerError::DuplicateDevice(instance.id));
             }
@@ -192,12 +208,19 @@ impl LinkScheduler {
     }
 
     pub fn counters(&self) -> Vec<(String, DeviceCounters)> {
-        self.devices.iter().map(|d| (d.instance.id.clone(), d.counters.clone())).collect()
+        self.devices
+            .iter()
+            .map(|d| (d.instance.id.clone(), d.counters.clone()))
+            .collect()
     }
 
     /// Default timeout for urgent jobs addressed to `unit`.
     pub fn timeout_for_unit(&self, unit: u8) -> u64 {
-        self.devices.iter().find(|d| d.instance.unit_id == unit).map(|d| d.timeout_ms).unwrap_or(1000)
+        self.devices
+            .iter()
+            .find(|d| d.instance.unit_id == unit)
+            .map(|d| d.timeout_ms)
+            .unwrap_or(1000)
     }
 
     /// Queue a command or alarm job. On a dead link it fails at once (never replayed later).
@@ -207,10 +230,15 @@ impl LinkScheduler {
             return;
         }
         match &job {
-            UrgentJob::Command { .. } | UrgentJob::Read { priority: Priority::Command, .. } => {
-                self.commands.push_back(job)
-            }
-            UrgentJob::Read { priority: Priority::Alarm, .. } => self.alarms.push_back(job),
+            UrgentJob::Command { .. }
+            | UrgentJob::Read {
+                priority: Priority::Command,
+                ..
+            } => self.commands.push_back(job),
+            UrgentJob::Read {
+                priority: Priority::Alarm,
+                ..
+            } => self.alarms.push_back(job),
         }
     }
 
@@ -234,7 +262,9 @@ impl LinkScheduler {
         }
         let now = self.clock.mono_ms();
         let Some(i) = self.pick(now) else {
-            return Step::Idle { until_mono_ms: self.next_wake(now) };
+            return Step::Idle {
+                until_mono_ms: self.next_wake(now),
+            };
         };
         self.poll_block(t, i, emit)
     }
@@ -287,7 +317,11 @@ impl LinkScheduler {
         let (_, _, i) = best?;
         let d = &mut self.devices[i];
         if d.cycle.is_none() {
-            d.cycle = Some(Cycle { due: d.next_due, block: 0, retries_used: 0 });
+            d.cycle = Some(Cycle {
+                due: d.next_due,
+                block: 0,
+                retries_used: 0,
+            });
             if let Some(prev) = d.last_cycle_start {
                 d.counters.cycle_ms = Some(now.saturating_sub(prev));
             }
@@ -311,23 +345,41 @@ impl LinkScheduler {
                 }
             }
         }
-        if wake == u64::MAX { now + 1000 } else { wake.max(now + 1) }
+        if wake == u64::MAX {
+            now + 1000
+        } else {
+            wake.max(now + 1)
+        }
     }
 
     /// Returns true if the link was lost.
     fn run_urgent(&mut self, t: &mut dyn Transport, job: UrgentJob) -> bool {
         match job {
-            UrgentJob::Read { unit, request, timeout_ms, reply, .. } => {
+            UrgentJob::Read {
+                unit,
+                request,
+                timeout_ms,
+                reply,
+                ..
+            } => {
                 let rec = self.exchanger.transact(t, unit, Outgoing::Read(&request), timeout_ms);
                 self.count_unit(unit, &rec);
                 let lost = rec.outcome.as_ref().is_err_and(ExchangeError::is_link_lost);
-                let result = rec.outcome.and_then(|pdu| decode_read_response(&request, &pdu).map_err(reply_error));
+                let result = rec
+                    .outcome
+                    .and_then(|pdu| decode_read_response(&request, &pdu).map_err(reply_error));
                 reply(result);
                 lost
             }
-            UrgentJob::Command { frame, timeout_ms, reply } => {
+            UrgentJob::Command {
+                frame,
+                timeout_ms,
+                reply,
+            } => {
                 // Exactly one transmission; whatever happens is reported, never retried.
-                let rec = self.exchanger.transact(t, frame.unit(), Outgoing::Command(&frame), timeout_ms);
+                let rec = self
+                    .exchanger
+                    .transact(t, frame.unit(), Outgoing::Command(&frame), timeout_ms);
                 self.count_unit(frame.unit(), &rec);
                 let lost = rec.outcome.as_ref().is_err_and(ExchangeError::is_link_lost);
                 reply(rec);
@@ -343,7 +395,9 @@ impl LinkScheduler {
     }
 
     fn poll_block(&mut self, t: &mut dyn Transport, i: usize, emit: &mut dyn FnMut(Sample)) -> Step {
-        let Some(cycle) = self.devices[i].cycle else { return Step::Worked };
+        let Some(cycle) = self.devices[i].cycle else {
+            return Step::Worked;
+        };
         let (unit, request, timeout) = {
             let d = &self.devices[i];
             (d.instance.unit_id, d.blocks[cycle.block].request, d.timeout_ms)
@@ -352,7 +406,9 @@ impl LinkScheduler {
         let now_mono = self.clock.mono_ms();
         let now_utc = self.clock.utc_ms();
         count(&mut self.devices[i].counters, rec.outcome.as_ref().err());
-        let result = rec.outcome.and_then(|pdu| decode_read_response(&request, &pdu).map_err(reply_error));
+        let result = rec
+            .outcome
+            .and_then(|pdu| decode_read_response(&request, &pdu).map_err(reply_error));
         match result {
             Ok(data) => {
                 self.devices[i].counters.good += 1;
@@ -366,7 +422,10 @@ impl LinkScheduler {
             Err(e @ (ExchangeError::Timeout | ExchangeError::Crc(_))) => {
                 let d = &mut self.devices[i];
                 if d.failures == 0 && cycle.retries_used < d.instance.read_retries {
-                    d.cycle = Some(Cycle { retries_used: cycle.retries_used + 1, ..cycle });
+                    d.cycle = Some(Cycle {
+                        retries_used: cycle.retries_used + 1,
+                        ..cycle
+                    });
                     return Step::Worked;
                 }
                 if matches!(e, ExchangeError::Timeout) {
@@ -402,10 +461,16 @@ impl LinkScheduler {
                     let slice = words.get(start..start + usize::from(bt.width)).unwrap_or(&[]).to_vec();
                     decode_tag(&self.devices[i].profile, bt.register, slice)
                 }
-                Err(e) => Observation { quality: e.quality(), value: None, raw: None, error: Some(e.to_string()) },
+                Err(e) => Observation {
+                    quality: e.quality(),
+                    value: None,
+                    raw: None,
+                    error: Some(e.to_string()),
+                },
             };
             if !obs.quality.is_good() {
-                self.devices[i].counters.decode_errors += u64::from(obs.quality == Quality::DecodeError && result.is_ok());
+                self.devices[i].counters.decode_errors +=
+                    u64::from(obs.quality == Quality::DecodeError && result.is_ok());
             }
             let seq = self.next_seq();
             emit(self.devices[i].tags[bt.register].observe(obs, seq, now_utc, now_mono));
@@ -416,7 +481,11 @@ impl LinkScheduler {
         let d = &mut self.devices[i];
         let Some(c) = d.cycle else { return };
         if c.block + 1 < d.blocks.len() {
-            d.cycle = Some(Cycle { block: c.block + 1, retries_used: 0, ..c });
+            d.cycle = Some(Cycle {
+                block: c.block + 1,
+                retries_used: 0,
+                ..c
+            });
             return;
         }
         d.cycle = None;
@@ -440,8 +509,10 @@ impl LinkScheduler {
     fn abort_cycle(&mut self, i: usize, e: &ExchangeError, now_utc: i64, now_mono: u64, emit: &mut dyn FnMut(Sample)) {
         let Some(c) = self.devices[i].cycle else { return };
         self.emit_block(i, c.block, Err(e), now_utc, now_mono, emit);
-        let later: Vec<usize> =
-            self.devices[i].blocks[c.block + 1..].iter().flat_map(|b| b.tags.iter().map(|t| t.register)).collect();
+        let later: Vec<usize> = self.devices[i].blocks[c.block + 1..]
+            .iter()
+            .flat_map(|b| b.tags.iter().map(|t| t.register))
+            .collect();
         for r in later {
             let obs = Observation {
                 quality: e.quality(),
@@ -473,7 +544,12 @@ impl LinkScheduler {
             d.counters.last_error = Some(why.to_owned());
             for tag in &mut d.tags {
                 seq += 1;
-                let obs = Observation { quality: Quality::Disconnected, value: None, raw: None, error: Some(why.to_owned()) };
+                let obs = Observation {
+                    quality: Quality::Disconnected,
+                    value: None,
+                    raw: None,
+                    error: Some(why.to_owned()),
+                };
                 emit(tag.observe(obs, seq, now_utc, now_mono));
             }
         }
@@ -520,10 +596,20 @@ fn fail_job(job: UrgentJob) {
 /// Decode one tag's words into an observation (GOOD or DECODE_ERROR with the raw words kept).
 pub fn decode_tag(profile: &Profile, register: usize, words: Vec<u16>) -> Observation {
     let Some(reg) = profile.registers.get(register) else {
-        return Observation { quality: Quality::DecodeError, value: None, raw: Some(words), error: Some("no such tag".into()) };
+        return Observation {
+            quality: Quality::DecodeError,
+            value: None,
+            raw: Some(words),
+            error: Some("no such tag".into()),
+        };
     };
     let Some(dt) = reg.data_type() else {
-        return Observation { quality: Quality::DecodeError, value: None, raw: Some(words), error: Some("bad type".into()) };
+        return Observation {
+            quality: Quality::DecodeError,
+            value: None,
+            raw: Some(words),
+            error: Some("bad type".into()),
+        };
     };
     let decoded = codec::decode(dt, reg.word_order, &words)
         .and_then(|raw| codec::to_engineering(&raw, &reg.scaling()).map(|eng| (raw, eng)));
@@ -533,8 +619,18 @@ pub fn decode_tag(profile: &Profile, register: usize, words: Vec<u16>) -> Observ
                 codec::RawValue::Str(s) => Some(s.clone()),
                 _ => None,
             };
-            Observation { quality: Quality::Good, value: Some(Value { raw, engineering, text }), raw: Some(words), error: None }
+            Observation {
+                quality: Quality::Good,
+                value: Some(Value { raw, engineering, text }),
+                raw: Some(words),
+                error: None,
+            }
         }
-        Err(e) => Observation { quality: Quality::DecodeError, value: None, raw: Some(words), error: Some(e.to_string()) },
+        Err(e) => Observation {
+            quality: Quality::DecodeError,
+            value: None,
+            raw: Some(words),
+            error: Some(e.to_string()),
+        },
     }
 }

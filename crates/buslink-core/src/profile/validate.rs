@@ -23,8 +23,9 @@ pub const TYPES: [(&str, Option<i128>); 11] = [
     ("string", None),
 ];
 pub const WORD_ORDERS: [&str; 4] = ["ABCD", "CDAB", "BADC", "DCBA"];
-pub const STD_BAUD: [i128; 14] =
-    [300, 600, 1200, 2400, 4800, 9600, 14400, 19200, 38400, 57600, 115_200, 230_400, 460_800, 921_600];
+pub const STD_BAUD: [i128; 14] = [
+    300, 600, 1200, 2400, 4800, 9600, 14400, 19200, 38400, 57600, 115_200, 230_400, 460_800, 921_600,
+];
 pub const ROLES: [&str; 2] = ["operator", "commissioner"];
 pub const RISKS: [&str; 3] = ["low", "medium", "high"];
 pub const COMMAND_KINDS: [&str; 5] = ["run", "stop", "setpoint", "reset_fault", "mode"];
@@ -53,8 +54,16 @@ pub const TOP_KEYS: [&str; 20] = [
     "comm_config",
     "notes",
 ];
-const REQUIRED_TOP: [&str; 8] =
-    ["schema_version", "profile_id", "profile_version", "vendor", "model", "support_level", "transport", "registers"];
+const REQUIRED_TOP: [&str; 8] = [
+    "schema_version",
+    "profile_id",
+    "profile_version",
+    "vendor",
+    "model",
+    "support_level",
+    "transport",
+    "registers",
+];
 pub const REG_KEYS: [&str; 20] = [
     "id",
     "name",
@@ -77,13 +86,40 @@ pub const REG_KEYS: [&str; 20] = [
     "poll",
     "source_page",
 ];
-pub const WRITE_KEYS: [&str; 8] = ["min", "max", "step", "allowed_values", "risk", "role", "confirm", "readback"];
+pub const WRITE_KEYS: [&str; 8] = [
+    "min",
+    "max",
+    "step",
+    "allowed_values",
+    "risk",
+    "role",
+    "confirm",
+    "readback",
+];
 pub const SOURCE_KEYS: [&str; 6] = ["document", "revision", "url", "pages", "retrieved", "publisher"];
-pub const HW_KEYS: [&str; 8] = ["date", "adapter", "platform", "firmware", "unit_id", "record", "result", "notes"];
-pub const RTU_KEYS: [&str; 7] =
-    ["unit_id", "baud", "data_bits", "parity", "stop_bits", "response_timeout_ms", "inter_frame_ms"];
+pub const HW_KEYS: [&str; 8] = [
+    "date", "adapter", "platform", "firmware", "unit_id", "record", "result", "notes",
+];
+pub const RTU_KEYS: [&str; 7] = [
+    "unit_id",
+    "baud",
+    "data_bits",
+    "parity",
+    "stop_bits",
+    "response_timeout_ms",
+    "inter_frame_ms",
+];
 pub const TCP_KEYS: [&str; 3] = ["unit_id", "port", "response_timeout_ms"];
-pub const CMD_KEYS: [&str; 8] = ["id", "kind", "label", "register", "value", "readback_register", "expected", "timeout_ms"];
+pub const CMD_KEYS: [&str; 8] = [
+    "id",
+    "kind",
+    "label",
+    "register",
+    "value",
+    "readback_register",
+    "expected",
+    "timeout_ms",
+];
 pub const CAP_KEYS: [&str; 4] = ["read", "write", "comm_config", "control"];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -106,10 +142,16 @@ pub struct Report {
 
 impl Report {
     fn err(&mut self, path: impl Into<String>, msg: impl Into<String>) {
-        self.errors.push(Issue { path: path.into(), message: msg.into() });
+        self.errors.push(Issue {
+            path: path.into(),
+            message: msg.into(),
+        });
     }
     fn warn(&mut self, path: impl Into<String>, msg: impl Into<String>) {
-        self.warnings.push(Issue { path: path.into(), message: msg.into() });
+        self.warnings.push(Issue {
+            path: path.into(),
+            message: msg.into(),
+        });
     }
     pub fn is_valid(&self) -> bool {
         self.errors.is_empty()
@@ -123,7 +165,9 @@ fn is_id(s: &str) -> bool {
     !b.is_empty()
         && b.len() <= 48
         && b[0].is_ascii_lowercase()
-        && b[1..].iter().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_')
+        && b[1..]
+            .iter()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_')
 }
 
 fn is_profile_id(s: &str) -> bool {
@@ -156,7 +200,9 @@ fn is_date(s: &str) -> bool {
     b.len() == 10
         && b[4] == b'-'
         && b[7] == b'-'
-        && b.iter().enumerate().all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit())
+        && b.iter()
+            .enumerate()
+            .all(|(i, c)| i == 4 || i == 7 || c.is_ascii_digit())
 }
 
 fn is_bit_key(s: &str) -> Option<u32> {
@@ -221,7 +267,10 @@ impl<'a> Obj<'a> {
 fn keys(r: &mut Report, path: &str, obj: &Obj<'_>, allowed: &[&str]) {
     for k in obj.keys() {
         if !allowed.contains(&k) {
-            r.err(format!("{path}.{k}"), "unknown key (profiles are strict data; no scripts or expressions)");
+            r.err(
+                format!("{path}.{k}"),
+                "unknown key (profiles are strict data; no scripts or expressions)",
+            );
         }
     }
 }
@@ -257,7 +306,10 @@ fn text(r: &mut Report, path: &str, v: Option<&J>, max_len: usize, required: boo
         r.err(path, "contains control characters");
     }
     if s.starts_with(['=', '+', '@', '\t', '\r']) {
-        r.warn(path, "starts with a spreadsheet formula character; exports must escape it");
+        r.warn(
+            path,
+            "starts with a spreadsheet formula character; exports must escape it",
+        );
     }
 }
 
@@ -359,13 +411,36 @@ fn check_transport(r: &mut Report, path: &str, t: &J) {
                     && let Some(b) = int_of(baud)
                     && !STD_BAUD.contains(&b)
                 {
-                    r.warn(format!("{p}.baud"), format!("{b} is non-standard; Android CDC drivers may reject it"));
+                    r.warn(
+                        format!("{p}.baud"),
+                        format!("{b} is non-standard; Android CDC drivers may reject it"),
+                    );
                 }
                 enum_int(r, &format!("{p}.data_bits"), o.get("data_bits"), &[7, 8]);
-                enum_str(r, &format!("{p}.parity"), o.get("parity"), &["none", "even", "odd"], true);
+                enum_str(
+                    r,
+                    &format!("{p}.parity"),
+                    o.get("parity"),
+                    &["none", "even", "odd"],
+                    true,
+                );
                 enum_int(r, &format!("{p}.stop_bits"), o.get("stop_bits"), &[1, 2]);
-                int_range(r, &format!("{p}.response_timeout_ms"), o.get("response_timeout_ms"), 50, 10_000, false);
-                int_range(r, &format!("{p}.inter_frame_ms"), o.get("inter_frame_ms"), 0, 1_000, false);
+                int_range(
+                    r,
+                    &format!("{p}.response_timeout_ms"),
+                    o.get("response_timeout_ms"),
+                    50,
+                    10_000,
+                    false,
+                );
+                int_range(
+                    r,
+                    &format!("{p}.inter_frame_ms"),
+                    o.get("inter_frame_ms"),
+                    0,
+                    1_000,
+                    false,
+                );
             }
         }
     }
@@ -378,7 +453,14 @@ fn check_transport(r: &mut Report, path: &str, t: &J) {
                 keys(r, &p, &o, &TCP_KEYS);
                 int_range(r, &format!("{p}.unit_id"), o.get("unit_id"), 1, 255, true);
                 int_range(r, &format!("{p}.port"), o.get("port"), 1, 65_535, true);
-                int_range(r, &format!("{p}.response_timeout_ms"), o.get("response_timeout_ms"), 50, 10_000, false);
+                int_range(
+                    r,
+                    &format!("{p}.response_timeout_ms"),
+                    o.get("response_timeout_ms"),
+                    50,
+                    10_000,
+                    false,
+                );
             }
         }
     }
@@ -424,7 +506,10 @@ fn check_register(r: &mut Report, path: &str, reg: &J, ids: &mut Vec<String>) ->
     if let Some(da) = o.get("doc_address") {
         let ok = da.as_int().is_some() || da.as_str().is_some_and(|s| (1..=16).contains(&s.chars().count()));
         if !ok {
-            r.err(format!("{path}.doc_address"), "must be the manual's label as a short string or integer");
+            r.err(
+                format!("{path}.doc_address"),
+                "must be the manual's label as a short string or integer",
+            );
         }
     }
     let type_names: Vec<&str> = TYPES.iter().map(|(n, _)| *n).collect();
@@ -435,7 +520,14 @@ fn check_register(r: &mut Report, path: &str, reg: &J, ids: &mut Vec<String>) ->
     if type_ok && let Some(typ) = typ {
         width = TYPES.iter().find(|(n, _)| *n == typ).and_then(|(_, w)| *w);
         if typ == "string" {
-            if int_range(r, &format!("{path}.length"), o.get("length"), 1, MAX_REGS_PER_READ, true) {
+            if int_range(
+                r,
+                &format!("{path}.length"),
+                o.get("length"),
+                1,
+                MAX_REGS_PER_READ,
+                true,
+            ) {
                 width = int_of(o.get("length"));
             }
         } else if o.has("length") {
@@ -444,10 +536,16 @@ fn check_register(r: &mut Report, path: &str, reg: &J, ids: &mut Vec<String>) ->
         if table_ok && let Some(table) = table {
             let bit_table = matches!(table, "coil" | "discrete_input");
             if bit_table && typ != "bool" {
-                r.err(format!("{path}.type"), format!("table '{table}' holds single bits; type must be 'bool'"));
+                r.err(
+                    format!("{path}.type"),
+                    format!("table '{table}' holds single bits; type must be 'bool'"),
+                );
             }
             if !bit_table && typ == "bool" {
-                r.err(format!("{path}.type"), "a register is 16 bits; use 'bitfield' with 'bits' for flags");
+                r.err(
+                    format!("{path}.type"),
+                    "a register is 16 bits; use 'bitfield' with 'bits' for flags",
+                );
             }
         }
         let wo = o.get("word_order");
@@ -458,7 +556,10 @@ fn check_register(r: &mut Report, path: &str, reg: &J, ids: &mut Vec<String>) ->
                 enum_str(r, &format!("{path}.word_order"), wo, &["ABCD", "BADC"], true);
             }
         } else if wo.is_some() {
-            r.err(format!("{path}.word_order"), format!("not meaningful for single-register type '{typ}'"));
+            r.err(
+                format!("{path}.word_order"),
+                format!("not meaningful for single-register type '{typ}'"),
+            );
         }
         if typ != "bitfield" && o.has("bits") {
             r.err(format!("{path}.bits"), "only allowed for type 'bitfield'");
@@ -467,7 +568,7 @@ fn check_register(r: &mut Report, path: &str, reg: &J, ids: &mut Vec<String>) ->
     match o.get("bits") {
         Some(J::Obj(bits)) => {
             for (b, label) in bits {
-                if !is_bit_key(b).is_some_and(|n| n <= 15) {
+                if is_bit_key(b).is_none_or(|n| n > 15) {
                     r.err(format!("{path}.bits.{b}"), "bit index must be \"0\"..\"15\"");
                 }
                 text_req(r, &format!("{path}.bits.{b}"), Some(label), 80);
@@ -481,16 +582,16 @@ fn check_register(r: &mut Report, path: &str, reg: &J, ids: &mut Vec<String>) ->
         && let (Some(a), Some(w)) = (address, width)
         && a + w - 1 > 65_535
     {
-        r.err(format!("{path}.address"), format!("address {a} + {w} registers runs past 65535"));
+        r.err(
+            format!("{path}.address"),
+            format!("address {a} + {w} registers runs past 65535"),
+        );
     }
 
-    match o.get("scale") {
-        None => {}
-        Some(s) => {
-            if !s.as_num().is_some_and(|v| v != 0.0) {
-                r.err(format!("{path}.scale"), "must be a non-zero finite number");
-            }
-        }
+    if let Some(s) = o.get("scale")
+        && s.as_num().is_none_or(|v| v == 0.0)
+    {
+        r.err(format!("{path}.scale"), "must be a non-zero finite number");
     }
     if let Some(off) = o.get("offset")
         && off.as_num().is_none()
@@ -498,9 +599,12 @@ fn check_register(r: &mut Report, path: &str, reg: &J, ids: &mut Vec<String>) ->
         r.err(format!("{path}.offset"), "must be a finite number");
     }
     if let Some(u) = o.get("unit")
-        && !u.as_str().is_some_and(|s| s.chars().count() <= 16)
+        && u.as_str().is_none_or(|s| s.chars().count() > 16)
     {
-        r.err(format!("{path}.unit"), "must be a string of at most 16 characters ('' for dimensionless)");
+        r.err(
+            format!("{path}.unit"),
+            "must be a string of at most 16 characters ('' for dimensionless)",
+        );
     }
     int_range(r, &format!("{path}.decimals"), o.get("decimals"), 0, 9, false);
     let vr = o.get("valid_range");
@@ -509,7 +613,10 @@ fn check_register(r: &mut Report, path: &str, reg: &J, ids: &mut Vec<String>) ->
         _ => None,
     });
     if vr.is_some() && !vr_nums.is_some_and(|(lo, hi)| lo < hi) {
-        r.err(format!("{path}.valid_range"), "must be [min, max] with min < max (engineering units)");
+        r.err(
+            format!("{path}.valid_range"),
+            "must be [min, max] with min < max (engineering units)",
+        );
     }
     if let Some(sen) = o.get("invalid_sentinels")
         && !sen.as_arr().is_some_and(|a| a.iter().all(|x| x.as_int().is_some()))
@@ -517,7 +624,13 @@ fn check_register(r: &mut Report, path: &str, reg: &J, ids: &mut Vec<String>) ->
         r.err(format!("{path}.invalid_sentinels"), "must be a list of raw integers");
     }
     if o.has("poll") {
-        enum_str(r, &format!("{path}.poll"), o.get("poll"), &["fast", "normal", "slow"], true);
+        enum_str(
+            r,
+            &format!("{path}.poll"),
+            o.get("poll"),
+            &["fast", "normal", "slow"],
+            true,
+        );
     }
     if o.has("source_page") {
         text_req(r, &format!("{path}.source_page"), o.get("source_page"), 40);
@@ -525,17 +638,27 @@ fn check_register(r: &mut Report, path: &str, reg: &J, ids: &mut Vec<String>) ->
 
     let read_default = J::Str("read".into());
     let access = o.get("access").unwrap_or(&read_default);
-    enum_str(r, &format!("{path}.access"), Some(access), &["read", "read_write"], true);
+    enum_str(
+        r,
+        &format!("{path}.access"),
+        Some(access),
+        &["read", "read_write"],
+        true,
+    );
     let w = o.get("write");
     let read_write = access.as_str() == Some("read_write");
     if read_write {
-        if table_ok && let Some(t) = table
+        if table_ok
+            && let Some(t) = table
             && !matches!(t, "coil" | "holding_register")
         {
             r.err(format!("{path}.access"), format!("table '{t}' is read-only in Modbus"));
         }
         match w.and_then(J::as_obj) {
-            None => r.err(format!("{path}.write"), "required for read_write registers (bounds, risk, role)"),
+            None => r.err(
+                format!("{path}.write"),
+                "required for read_write registers (bounds, risk, role)",
+            ),
             Some(m) => {
                 let wo = Obj(m);
                 let p = format!("{path}.write");
@@ -550,7 +673,9 @@ fn check_register(r: &mut Report, path: &str, reg: &J, ids: &mut Vec<String>) ->
                 }
                 let has_bounds = wo.has("min") || wo.has("max");
                 if let Some(av) = wo.get("allowed_values") {
-                    let ok = av.as_arr().is_some_and(|a| !a.is_empty() && a.iter().all(|x| x.as_num().is_some()));
+                    let ok = av
+                        .as_arr()
+                        .is_some_and(|a| !a.is_empty() && a.iter().all(|x| x.as_num().is_some()));
                     if !ok {
                         r.err(format!("{p}.allowed_values"), "must be a non-empty list of numbers");
                     }
@@ -583,7 +708,13 @@ fn check_register(r: &mut Report, path: &str, reg: &J, ids: &mut Vec<String>) ->
     let (Some(w), true, true, Some(a), Some(t)) = (width, table_ok, addr_ok, address, table) else {
         return None;
     };
-    Some(Span { id: rid.map(str::to_owned), table: t.to_owned(), start: a, end: a + w - 1, writable: read_write })
+    Some(Span {
+        id: rid.map(str::to_owned),
+        table: t.to_owned(),
+        start: a,
+        end: a + w - 1,
+        writable: read_write,
+    })
 }
 
 fn check_capabilities<'a>(r: &mut Report, caps: Option<&'a J>) -> Vec<(&'a str, &'a J)> {
@@ -639,8 +770,13 @@ fn check_hardware_evidence(r: &mut Report, ev: Option<&J>) -> usize {
         if o.has("unit_id") {
             int_range(r, &format!("{p}.unit_id"), o.get("unit_id"), 1, 255, true);
         }
-        if enum_str(r, &format!("{p}.result"), o.get("result"), &["pass", "fail", "partial"], true)
-            && is_str(o.get("result"), "pass")
+        if enum_str(
+            r,
+            &format!("{p}.result"),
+            o.get("result"),
+            &["pass", "fail", "partial"],
+            true,
+        ) && is_str(o.get("result"), "pass")
         {
             passing += 1;
         }
@@ -654,7 +790,11 @@ fn strip_nulls(r: &mut Report, v: &J, path: &str) -> J {
         J::Obj(m) => {
             let mut out = Vec::with_capacity(m.len());
             for (k, val) in m {
-                let p = if path.is_empty() { k.clone() } else { format!("{path}.{k}") };
+                let p = if path.is_empty() {
+                    k.clone()
+                } else {
+                    format!("{path}.{k}")
+                };
                 if val.is_null() {
                     r.err(p, "null is not allowed; omit the key");
                 } else {
@@ -663,7 +803,12 @@ fn strip_nulls(r: &mut Report, v: &J, path: &str) -> J {
             }
             J::Obj(out)
         }
-        J::Arr(a) => J::Arr(a.iter().enumerate().map(|(i, x)| strip_nulls(r, x, &format!("{path}[{i}]"))).collect()),
+        J::Arr(a) => J::Arr(
+            a.iter()
+                .enumerate()
+                .map(|(i, x)| strip_nulls(r, x, &format!("{path}[{i}]")))
+                .collect(),
+        ),
         other => other.clone(),
     }
 }
@@ -681,7 +826,7 @@ pub fn validate(doc: &J) -> Report {
     keys(&mut r, "$", &o, &TOP_KEYS);
     for k in ["$schema", "$comment"] {
         if let Some(v) = o.get(k)
-            && !v.as_str().is_some_and(|s| s.chars().count() <= 2000)
+            && v.as_str().is_none_or(|s| s.chars().count() > 2000)
         {
             r.err(k, "must be a string");
         }
@@ -697,7 +842,9 @@ pub fn validate(doc: &J) -> Report {
         r.err("schema_version", "this validator understands schema_version 1 only");
     }
     if let Some(pid) = o.get("profile_id")
-        && !pid.as_str().is_some_and(|s| is_profile_id(s) && (3..=64).contains(&s.chars().count()))
+        && !pid
+            .as_str()
+            .is_some_and(|s| is_profile_id(s) && (3..=64).contains(&s.chars().count()))
     {
         r.err("profile_id", "must be 3-64 chars of a-z, 0-9 separated by . _ -");
     }
@@ -749,11 +896,17 @@ pub fn validate(doc: &J) -> Report {
 
     let claims = |name: &str| is_str(level, name) || caps.iter().any(|(_, v)| v.as_str() == Some(name));
     if (claims("documented") || claims("hardware_verified")) && !o.has("source") {
-        r.err("source", "documented / hardware_verified profiles must cite the manual (document, revision, pages)");
+        r.err(
+            "source",
+            "documented / hardware_verified profiles must cite the manual (document, revision, pages)",
+        );
     }
     if claims("hardware_verified") {
         if sim_only {
-            r.err("support_level", "a simulated_only profile can never be hardware_verified");
+            r.err(
+                "support_level",
+                "a simulated_only profile can never be hardware_verified",
+            );
         } else if passing == 0 {
             r.err(
                 "evidence.hardware",
@@ -762,7 +915,10 @@ pub fn validate(doc: &J) -> Report {
         }
     }
     if sim_only && !(level.is_none() || is_str(level, "simulated") || is_str(level, "generic")) {
-        r.err("support_level", "simulated_only profiles must be 'simulated' (or 'generic')");
+        r.err(
+            "support_level",
+            "simulated_only profiles must be 'simulated' (or 'generic')",
+        );
     }
     if is_str(level, "generic") && !o.has("source") {
         r.warn("source", "generic profile without a source; label it clearly in the UI");
@@ -782,7 +938,7 @@ pub fn validate(doc: &J) -> Report {
     let mut ids: Vec<String> = Vec::new();
     if let Some(regs) = o.get("registers") {
         match regs.as_arr() {
-            Some(a) if a.is_empty() => r.err("registers", "must be a non-empty list"),
+            Some([]) => r.err("registers", "must be a non-empty list"),
             None => r.err("registers", "must be a non-empty list"),
             Some(a) if a.len() > 2000 => r.err("registers", "more than 2000 registers"),
             Some(a) => {
@@ -806,12 +962,19 @@ pub fn validate(doc: &J) -> Report {
         if a.table == b.table && b.start <= a.end {
             r.warn(
                 format!("registers.{}", py_key(b.id.as_deref())),
-                format!("overlaps '{}' in {} (alias? make sure it is intended)", py_key(a.id.as_deref()), a.table),
+                format!(
+                    "overlaps '{}' in {} (alias? make sure it is intended)",
+                    py_key(a.id.as_deref()),
+                    a.table
+                ),
             );
         }
     }
     if spans.iter().any(|s| s.writable) && cap_unset("write") {
-        r.err("capabilities.write", "profile has writable registers; declare the write support level");
+        r.err(
+            "capabilities.write",
+            "profile has writable registers; declare the write support level",
+        );
     }
 
     if let Some(cmds) = o.get("commands") {
@@ -825,7 +988,10 @@ pub fn validate(doc: &J) -> Report {
                     );
                 }
                 if cap_unset("control") {
-                    r.err("capabilities.control", "profile has commands; declare the control support level");
+                    r.err(
+                        "capabilities.control",
+                        "profile has commands; declare the control support level",
+                    );
                 }
                 let mut seen: Vec<String> = Vec::new();
                 for (i, c) in list.iter().enumerate() {
@@ -844,10 +1010,16 @@ pub fn validate(doc: &J) -> Report {
                     enum_str(&mut r, &format!("{p}.kind"), kind, &COMMAND_KINDS, true);
                     text_req(&mut r, &format!("{p}.label"), co.get("label"), 80);
                     if !lookup(str_of(co.get("register"))).is_some_and(|s| s.writable) {
-                        r.err(format!("{p}.register"), "must name a read_write register of this profile");
+                        r.err(
+                            format!("{p}.register"),
+                            "must name a read_write register of this profile",
+                        );
                     }
                     if lookup(str_of(co.get("readback_register"))).is_none() {
-                        r.err(format!("{p}.readback_register"), "required; must name a register of this profile");
+                        r.err(
+                            format!("{p}.readback_register"),
+                            "required; must name a register of this profile",
+                        );
                     }
                     if is_str(kind, "setpoint") {
                         if co.has("value") {
@@ -856,13 +1028,25 @@ pub fn validate(doc: &J) -> Report {
                                 "setpoint values come from the operator, bounded by the register's write limits",
                             );
                         }
-                    } else if str_of(kind).is_some_and(|k| COMMAND_KINDS.contains(&k)) && num_of(co.get("value")).is_none() {
+                    } else if str_of(kind).is_some_and(|k| COMMAND_KINDS.contains(&k))
+                        && num_of(co.get("value")).is_none()
+                    {
                         r.err(format!("{p}.value"), "fixed commands need a numeric value");
                     }
                     if co.get("expected").is_some_and(|v| v.as_num().is_none()) {
-                        r.err(format!("{p}.expected"), "must be a number (engineering units of the readback register)");
+                        r.err(
+                            format!("{p}.expected"),
+                            "must be a number (engineering units of the readback register)",
+                        );
                     }
-                    int_range(&mut r, &format!("{p}.timeout_ms"), co.get("timeout_ms"), 100, 30_000, false);
+                    int_range(
+                        &mut r,
+                        &format!("{p}.timeout_ms"),
+                        co.get("timeout_ms"),
+                        100,
+                        30_000,
+                        false,
+                    );
                 }
             }
         }
@@ -874,7 +1058,10 @@ pub fn validate(doc: &J) -> Report {
             Some(m) => {
                 keys(&mut r, "comm_config", &Obj(m), &["unit_id", "baud"]);
                 if cap_unset("comm_config") {
-                    r.err("capabilities.comm_config", "profile has comm_config; declare its support level");
+                    r.err(
+                        "capabilities.comm_config",
+                        "profile has comm_config; declare its support level",
+                    );
                 }
                 for (k, v) in m {
                     let p = format!("comm_config.{k}");
@@ -885,7 +1072,10 @@ pub fn validate(doc: &J) -> Report {
                     let vo = Obj(vm);
                     keys(&mut r, &p, &vo, &["register", "apply", "codes"]);
                     if !lookup(str_of(vo.get("register"))).is_some_and(|s| s.writable) {
-                        r.err(format!("{p}.register"), "must name a read_write register of this profile");
+                        r.err(
+                            format!("{p}.register"),
+                            "must name a read_write register of this profile",
+                        );
                     }
                     enum_str(&mut r, &format!("{p}.apply"), vo.get("apply"), &APPLY, true);
                     if k == "baud" {

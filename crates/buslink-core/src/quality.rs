@@ -132,7 +132,11 @@ pub struct Sample {
 impl Sample {
     /// The engineering value only when it is a current GOOD reading.
     pub fn fresh_value(&self) -> Option<f64> {
-        if self.quality.is_good() { self.value.as_ref().and_then(|v| v.engineering) } else { None }
+        if self.quality.is_good() {
+            self.value.as_ref().and_then(|v| v.engineering)
+        } else {
+            None
+        }
     }
 }
 
@@ -172,7 +176,11 @@ pub struct Observation {
 
 impl TagState {
     pub fn new(identity: TagIdentity) -> Self {
-        Self { identity, last_good: None, last_quality: None }
+        Self {
+            identity,
+            last_good: None,
+            last_quality: None,
+        }
     }
 
     pub fn last_quality(&self) -> Option<Quality> {
@@ -193,7 +201,13 @@ impl TagState {
         let mut quality = obs.quality;
         if quality.is_good() {
             match obs.value {
-                Some(value) => self.last_good = Some(LastGood { value, utc_ms: now_utc, mono_ms: now_mono }),
+                Some(value) => {
+                    self.last_good = Some(LastGood {
+                        value,
+                        utc_ms: now_utc,
+                        mono_ms: now_mono,
+                    })
+                }
                 // GOOD without a value would be a bug; never publish it as GOOD.
                 None => quality = Quality::DecodeError,
             }
@@ -238,25 +252,41 @@ mod tests {
     fn good(v: f64) -> Observation {
         Observation {
             quality: Quality::Good,
-            value: Some(Value { raw: RawValue::I16((v * 10.0) as i16), engineering: Some(v), text: None }),
+            value: Some(Value {
+                raw: RawValue::I16((v * 10.0) as i16),
+                engineering: Some(v),
+                text: None,
+            }),
             raw: Some(vec![(v * 10.0) as u16]),
             error: None,
         }
     }
 
     fn fail(q: Quality) -> Observation {
-        Observation { quality: q, value: None, raw: None, error: Some("x".into()) }
+        Observation {
+            quality: q,
+            value: None,
+            raw: None,
+            error: Some("x".into()),
+        }
     }
 
     #[test]
     fn failure_keeps_last_good_with_original_timestamp() {
         let mut t = tag();
         let s1 = t.observe(good(25.3), 1, 10_000, 0);
-        assert_eq!((s1.quality, s1.value_ts_ms, s1.age_ms), (Quality::Good, Some(10_000), Some(0)));
+        assert_eq!(
+            (s1.quality, s1.value_ts_ms, s1.age_ms),
+            (Quality::Good, Some(10_000), Some(0))
+        );
         let s2 = t.observe(fail(Quality::Timeout), 2, 11_000, 1_000);
         assert_eq!(s2.quality, Quality::Timeout);
         assert_eq!(s2.value.as_ref().unwrap().engineering, Some(25.3));
-        assert_eq!(s2.value_ts_ms, Some(10_000), "timestamp of the value is never refreshed");
+        assert_eq!(
+            s2.value_ts_ms,
+            Some(10_000),
+            "timestamp of the value is never refreshed"
+        );
         assert_eq!(s2.age_ms, Some(1_000));
         assert_eq!(s2.fresh_value(), None);
         let s3 = t.observe(fail(Quality::Exception(2)), 3, 15_000, 5_000);
@@ -274,7 +304,17 @@ mod tests {
     #[test]
     fn good_without_value_is_never_published_as_good() {
         let mut t = tag();
-        let s = t.observe(Observation { quality: Quality::Good, value: None, raw: None, error: None }, 1, 0, 0);
+        let s = t.observe(
+            Observation {
+                quality: Quality::Good,
+                value: None,
+                raw: None,
+                error: None,
+            },
+            1,
+            0,
+            0,
+        );
         assert_eq!(s.quality, Quality::DecodeError);
     }
 
@@ -304,7 +344,10 @@ mod tests {
         assert_eq!(Quality::Exception(2).to_string(), "EXCEPTION 02");
         assert_eq!(Quality::Stale.opc_ua(), OpcUaClass::Uncertain);
         assert_eq!(Quality::Timeout.opc_ua(), OpcUaClass::Bad);
-        assert_eq!(serde_json::to_string(&Quality::Exception(2)).unwrap(), r#"{"code":"EXCEPTION","exception":2}"#);
+        assert_eq!(
+            serde_json::to_string(&Quality::Exception(2)).unwrap(),
+            r#"{"code":"EXCEPTION","exception":2}"#
+        );
         assert_eq!(serde_json::to_string(&Quality::Good).unwrap(), r#"{"code":"GOOD"}"#);
     }
 }

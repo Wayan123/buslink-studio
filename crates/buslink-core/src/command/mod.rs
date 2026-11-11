@@ -71,7 +71,9 @@ pub struct DirectLink<'a> {
 
 impl CommandLink for DirectLink<'_> {
     fn read(&mut self, unit: u8, request: ReadRequest) -> Result<ReadData, ExchangeError> {
-        let rec = self.exchanger.transact(self.transport, unit, Outgoing::Read(&request), self.timeout_ms);
+        let rec = self
+            .exchanger
+            .transact(self.transport, unit, Outgoing::Read(&request), self.timeout_ms);
         let pdu = rec.outcome?;
         decode_read_response(&request, &pdu).map_err(|e| match e {
             crate::protocol::pdu::ReplyError::Exception(c) => ExchangeError::Exception(c),
@@ -81,7 +83,8 @@ impl CommandLink for DirectLink<'_> {
 
     fn send(&mut self, frame: PreparedFrame) -> ExchangeRecord {
         let unit = frame.unit;
-        self.exchanger.transact(self.transport, unit, Outgoing::Command(&frame), self.timeout_ms)
+        self.exchanger
+            .transact(self.transport, unit, Outgoing::Command(&frame), self.timeout_ms)
     }
 }
 
@@ -297,7 +300,10 @@ pub enum CommandError {
     #[error("invalid device or profile: {0}")]
     Target(String),
     #[error("command service is {actual:?}, expected {expected}")]
-    WrongState { expected: &'static str, actual: CommandState },
+    WrongState {
+        expected: &'static str,
+        actual: CommandState,
+    },
     #[error("confirmation does not match the current preview")]
     PreviewMismatch,
     #[error(transparent)]
@@ -348,7 +354,9 @@ pub struct CommandConfig {
 
 impl Default for CommandConfig {
     fn default() -> Self {
-        Self { arm_timeout_ms: DEFAULT_ARM_TIMEOUT_MS }
+        Self {
+            arm_timeout_ms: DEFAULT_ARM_TIMEOUT_MS,
+        }
     }
 }
 
@@ -385,7 +393,9 @@ fn check_bounds(reg: &Register, value: f64) -> Result<(), CommandError> {
         if let Some(step) = w.step {
             let k = (value - min) / step;
             if (k - k.round()).abs() > 1e-6 {
-                return Err(CommandError::OutOfBounds(format!("{value} is not a multiple of {step} from {min}")));
+                return Err(CommandError::OutOfBounds(format!(
+                    "{value} is not a multiple of {step} from {min}"
+                )));
             }
         }
     } else if reg.table == Table::Coil {
@@ -398,7 +408,9 @@ fn check_bounds(reg: &Register, value: f64) -> Result<(), CommandError> {
     if let Some([lo, hi]) = reg.valid_range
         && (value < lo || value > hi)
     {
-        return Err(CommandError::OutOfBounds(format!("{value} is outside the valid range {lo}..{hi}")));
+        return Err(CommandError::OutOfBounds(format!(
+            "{value} is outside the valid range {lo}..{hi}"
+        )));
     }
     Ok(())
 }
@@ -437,6 +449,10 @@ impl CommandService {
     /// Frames sent since creation (for tests and diagnostics).
     pub fn sends(&self) -> u64 {
         self.sends
+    }
+
+    pub fn armed_unit(&self) -> Option<u8> {
+        self.armed.as_ref().map(|a| a.target.device.unit_id)
     }
 
     pub fn armed_device(&self) -> Option<&str> {
@@ -483,7 +499,13 @@ impl CommandService {
         r.preview_id = Some(p.id);
         r.old_value = p.old_value;
         r.requested_value = Some(p.new_value);
-        r.raw_value_hex = Some(p.raw_registers.iter().map(|v| format!("{v:04X}")).collect::<Vec<_>>().join(" "));
+        r.raw_value_hex = Some(
+            p.raw_registers
+                .iter()
+                .map(|v| format!("{v:04X}"))
+                .collect::<Vec<_>>()
+                .join(" "),
+        );
         r.request_hex = Some(p.frame_hex.clone());
         r
     }
@@ -513,17 +535,30 @@ impl CommandService {
     /// Arm control for one device. Re-arming another device drops the old one.
     pub fn arm(&mut self, target: CommandTarget, operator: Operator) -> Result<(), CommandError> {
         if matches!(self.inner, Inner::Sent | Inner::ReadBack) {
-            return Err(CommandError::WrongState { expected: "not executing", actual: self.state() });
+            return Err(CommandError::WrongState {
+                expected: "not executing",
+                actual: self.state(),
+            });
         }
         if operator.role < Role::Operator {
-            return Err(CommandError::Role { have: operator.role.as_str(), need: "operator" });
+            return Err(CommandError::Role {
+                have: operator.role.as_str(),
+                need: "operator",
+            });
         }
-        target.device.check(&target.profile, &target.link).map_err(|e| CommandError::Target(e.to_string()))?;
+        target
+            .device
+            .check(&target.profile, &target.link)
+            .map_err(|e| CommandError::Target(e.to_string()))?;
         if self.armed.is_some() {
             self.disarm(DisarmReason::Operator);
         }
         let expires_mono = self.clock.mono_ms() + self.config.arm_timeout_ms;
-        self.armed = Some(ArmedFor { target, operator, expires_mono });
+        self.armed = Some(ArmedFor {
+            target,
+            operator,
+            expires_mono,
+        });
         let rec = self.base_record(AuditEvent::Arm);
         if let Err(e) = self.audit.append(&rec) {
             self.armed = None;
@@ -575,7 +610,10 @@ impl CommandService {
     /// Check a request and build the confirmation preview. Reads the current value first.
     pub fn preview(&mut self, link: &mut dyn CommandLink, request: CommandRequest) -> Result<Preview, CommandError> {
         if matches!(self.inner, Inner::Confirmed(_) | Inner::Sent | Inner::ReadBack) {
-            return Err(CommandError::WrongState { expected: "armed", actual: self.state() });
+            return Err(CommandError::WrongState {
+                expected: "armed",
+                actual: self.state(),
+            });
         }
         self.ensure_armed()?;
         match self.build_plan(link, &request) {
@@ -605,19 +643,25 @@ impl CommandService {
             ));
         }
         if profile.capability(|c| c.write) == CapabilityLevel::Unsupported {
-            return Err(CommandError::ControlNotAllowed("the profile does not declare write support"));
+            return Err(CommandError::ControlNotAllowed(
+                "the profile does not declare write support",
+            ));
         }
         let (reg_id, value, command) = match request {
             CommandRequest::SetRegister { register, value } => (register.clone(), *value, None),
             CommandRequest::Named { command, value } => {
-                let c = profile.command(command).ok_or_else(|| CommandError::UnknownCommand(command.clone()))?;
+                let c = profile
+                    .command(command)
+                    .ok_or_else(|| CommandError::UnknownCommand(command.clone()))?;
                 if !profile.simulated_only || !simulator {
                     return Err(CommandError::ControlNotAllowed(
                         "control commands exist only for simulated devices in this release",
                     ));
                 }
                 if profile.capability(|c| c.control) == CapabilityLevel::Unsupported {
-                    return Err(CommandError::ControlNotAllowed("the profile does not declare control support"));
+                    return Err(CommandError::ControlNotAllowed(
+                        "the profile does not declare control support",
+                    ));
                 }
                 let v = match (c.kind, c.value, value) {
                     (CommandKind::Setpoint, _, Some(v)) => *v,
@@ -631,17 +675,26 @@ impl CommandService {
                 (c.register.clone(), v, Some(c.clone()))
             }
         };
-        let reg = profile.register(&reg_id).ok_or_else(|| CommandError::UnknownRegister(reg_id.clone()))?.clone();
+        let reg = profile
+            .register(&reg_id)
+            .ok_or_else(|| CommandError::UnknownRegister(reg_id.clone()))?
+            .clone();
         if !reg.is_writable() {
             return Err(CommandError::NotWritable(reg.id.clone()));
         }
-        let wspec = reg.write.clone().ok_or_else(|| CommandError::NotWritable(reg.id.clone()))?;
+        let wspec = reg
+            .write
+            .clone()
+            .ok_or_else(|| CommandError::NotWritable(reg.id.clone()))?;
         if !role.satisfies(wspec.role) {
             let need = match wspec.role {
                 WriteRole::Operator => "operator",
                 WriteRole::Commissioner => "commissioner",
             };
-            return Err(CommandError::Role { have: role.as_str(), need });
+            return Err(CommandError::Role {
+                have: role.as_str(),
+                need,
+            });
         }
         check_bounds(&reg, value)?;
         let unit = target.device.unit_id;
@@ -653,22 +706,38 @@ impl CommandService {
         }
         let dt = reg.data_type().ok_or(CommandError::UnsupportedType("unknown"))?;
         if matches!(dt, DataType::Bitfield | DataType::Str { .. }) {
-            return Err(CommandError::UnsupportedType(if dt == DataType::Bitfield { "bitfield" } else { "string" }));
+            return Err(CommandError::UnsupportedType(if dt == DataType::Bitfield {
+                "bitfield"
+            } else {
+                "string"
+            }));
         }
         let scaling = reg.scaling();
         let raw = codec::to_raw(dt, value, scaling.scale, scaling.offset)
             .map_err(|e| CommandError::NotRepresentable(e.to_string()))?;
-        let regs = codec::encode(dt, reg.word_order, &raw).map_err(|e| CommandError::NotRepresentable(e.to_string()))?;
+        let regs =
+            codec::encode(dt, reg.word_order, &raw).map_err(|e| CommandError::NotRepresentable(e.to_string()))?;
         let write = match (reg.table, regs.as_slice()) {
-            (Table::Coil, [v]) => WriteRequest::SingleCoil { address: reg.address, on: *v == 1 },
-            (Table::HoldingRegister, [v]) => WriteRequest::SingleRegister { address: reg.address, value: *v },
-            (Table::HoldingRegister, _) => WriteRequest::MultipleRegisters { address: reg.address, values: regs.clone() },
+            (Table::Coil, [v]) => WriteRequest::SingleCoil {
+                address: reg.address,
+                on: *v == 1,
+            },
+            (Table::HoldingRegister, [v]) => WriteRequest::SingleRegister {
+                address: reg.address,
+                value: *v,
+            },
+            (Table::HoldingRegister, _) => WriteRequest::MultipleRegisters {
+                address: reg.address,
+                values: regs.clone(),
+            },
             _ => return Err(CommandError::NotWritable(reg.id.clone())),
         };
         let pdu = write.encode().map_err(|e| CommandError::Encode(e.to_string()))?;
         // Self-check: the bytes decode back to exactly the intended request.
         if WriteRequest::decode(&pdu).as_ref() != Ok(&write) {
-            return Err(CommandError::Encode("encoded frame does not decode to the request".into()));
+            return Err(CommandError::Encode(
+                "encoded frame does not decode to the request".into(),
+            ));
         }
         let frame_bytes = if target.link.uses_rtu_framing() {
             rtu::encode_adu(unit, &pdu)
@@ -693,8 +762,14 @@ impl CommandService {
             Err(e) => (None, None, Some(read_error_text(&e))),
         };
 
-        let rb_id = command.as_ref().map(|c| c.readback_register.clone()).unwrap_or_else(|| reg.id.clone());
-        let rb_reg = profile.register(&rb_id).ok_or_else(|| CommandError::UnknownRegister(rb_id.clone()))?.clone();
+        let rb_id = command
+            .as_ref()
+            .map(|c| c.readback_register.clone())
+            .unwrap_or_else(|| reg.id.clone());
+        let rb_reg = profile
+            .register(&rb_id)
+            .ok_or_else(|| CommandError::UnknownRegister(rb_id.clone()))?
+            .clone();
         let rb_type = rb_reg.data_type().ok_or(CommandError::UnsupportedType("unknown"))?;
         let rb_req = ReadRequest::for_table(rb_reg.table, rb_reg.address, rb_reg.width())
             .map_err(|e| CommandError::Encode(e.to_string()))?;
@@ -738,7 +813,12 @@ impl CommandService {
         };
         Ok(Plan {
             preview,
-            frame: PreparedFrame { preview_id: id, unit, request: write, pdu },
+            frame: PreparedFrame {
+                preview_id: id,
+                unit,
+                request: write,
+                pdu,
+            },
             readback_request: rb_req,
             readback_type: rb_type,
             readback_register: rb_reg,
@@ -749,11 +829,17 @@ impl CommandService {
     /// The operator confirmed exactly this preview.
     pub fn confirm(&mut self, preview_id: u64) -> Result<(), CommandError> {
         if !matches!(self.inner, Inner::Previewed(_)) {
-            return Err(CommandError::WrongState { expected: "previewed", actual: self.state() });
+            return Err(CommandError::WrongState {
+                expected: "previewed",
+                actual: self.state(),
+            });
         }
         self.ensure_armed()?;
         let Inner::Previewed(plan) = std::mem::replace(&mut self.inner, Inner::Armed) else {
-            return Err(CommandError::WrongState { expected: "previewed", actual: self.state() });
+            return Err(CommandError::WrongState {
+                expected: "previewed",
+                actual: self.state(),
+            });
         };
         if plan.preview.id != preview_id {
             self.inner = Inner::Previewed(plan);
@@ -772,13 +858,26 @@ impl CommandService {
     /// Send the confirmed frame once, verify the echo, read back, audit.
     pub fn execute(&mut self, link: &mut dyn CommandLink) -> Result<CommandOutcome, CommandError> {
         if !matches!(self.inner, Inner::Confirmed(_)) {
-            return Err(CommandError::WrongState { expected: "confirmed", actual: self.state() });
+            return Err(CommandError::WrongState {
+                expected: "confirmed",
+                actual: self.state(),
+            });
         }
         self.ensure_armed()?;
         let Inner::Confirmed(plan) = std::mem::replace(&mut self.inner, Inner::Sent) else {
-            return Err(CommandError::WrongState { expected: "confirmed", actual: self.state() });
+            return Err(CommandError::WrongState {
+                expected: "confirmed",
+                actual: self.state(),
+            });
         };
-        let Plan { preview, frame, readback_request, readback_type, readback_register, compare } = *plan;
+        let Plan {
+            preview,
+            frame,
+            readback_request,
+            readback_type,
+            readback_register,
+            compare,
+        } = *plan;
         let mut sent_rec = self.plan_record(AuditEvent::Sent, &preview);
         sent_rec.note = Some("about to send (single attempt)".into());
         // Fail closed: no audit record, no write.
@@ -830,7 +929,11 @@ impl CommandService {
                     let value = decoded.as_ref().ok().copied().flatten();
                     let verdict = match &compare {
                         Compare::SameRaw(expected) => {
-                            if *expected == words { Readback::Verified } else { Readback::Mismatch }
+                            if *expected == words {
+                                Readback::Verified
+                            } else {
+                                Readback::Mismatch
+                            }
                         }
                         Compare::Expected(e, tol) => match value {
                             Some(v) if (v - e).abs() <= *tol => Readback::Verified,

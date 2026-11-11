@@ -85,7 +85,10 @@ impl LinkRegistry {
         if !owned.insert(key.to_owned()) {
             return Err(AlreadyOwned(key.to_owned()));
         }
-        Ok(LinkClaim { registry: Arc::clone(self), key: key.to_owned() })
+        Ok(LinkClaim {
+            registry: Arc::clone(self),
+            key: key.to_owned(),
+        })
     }
 
     pub fn is_owned(&self, key: &str) -> bool {
@@ -108,7 +111,11 @@ impl LinkClaim {
 
 impl Drop for LinkClaim {
     fn drop(&mut self) {
-        self.registry.owned.lock().unwrap_or_else(|e| e.into_inner()).remove(&self.key);
+        self.registry
+            .owned
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&self.key);
     }
 }
 
@@ -120,7 +127,10 @@ mod tests {
     fn one_owner_per_key() {
         let reg = LinkRegistry::new();
         let a = reg.claim("serial:com7").unwrap();
-        assert_eq!(reg.claim("serial:com7").unwrap_err(), AlreadyOwned("serial:com7".into()));
+        assert_eq!(
+            reg.claim("serial:com7").unwrap_err(),
+            AlreadyOwned("serial:com7".into())
+        );
         let _b = reg.claim("serial:com8").unwrap();
         drop(a);
         assert!(!reg.is_owned("serial:com7"));

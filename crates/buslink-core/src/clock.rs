@@ -66,7 +66,10 @@ pub struct ManualClock {
 impl ManualClock {
     /// `utc_origin_ms` is the UTC time that corresponds to monotonic 0.
     pub fn new(utc_origin_ms: i64) -> Self {
-        Self { mono: AtomicU64::new(0), utc_origin: AtomicI64::new(utc_origin_ms) }
+        Self {
+            mono: AtomicU64::new(0),
+            utc_origin: AtomicI64::new(utc_origin_ms),
+        }
     }
 
     pub fn shared(utc_origin_ms: i64) -> Arc<ManualClock> {

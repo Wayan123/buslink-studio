@@ -2,7 +2,7 @@
 //! error paths, warning paths) on every bundled profile and shared fixture.
 //! Also: the JSON Schema lists the same keys as the validators, every valid
 //! document loads into the typed model, and mutated documents never panic.
-#![allow(clippy::unwrap_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::type_complexity)]
 
 use buslink_core::profile::json::{self, J};
 use buslink_core::profile::{self, ProfileError, validate};
@@ -13,7 +13,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 fn root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().unwrap()
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .unwrap()
 }
 
 fn json_files(dir: &Path) -> Vec<PathBuf> {
@@ -47,35 +50,57 @@ fn path_of(issue: &str) -> String {
 fn rust_verdict(file: &Path) -> Verdict {
     let bytes = std::fs::read(file).unwrap();
     match profile::check(&bytes) {
-        Err(ProfileError::Json(_)) => Verdict { valid: false, errors: vec!["$".into()], warnings: vec![] },
+        Err(ProfileError::Json(_)) => Verdict {
+            valid: false,
+            errors: vec!["$".into()],
+            warnings: vec![],
+        },
         Err(e) => panic!("{}: {e}", file.display()),
         Ok(r) => {
             let mut errors: Vec<String> = r.errors.iter().map(|i| i.path.clone()).collect();
             let mut warnings: Vec<String> = r.warnings.iter().map(|i| i.path.clone()).collect();
             errors.sort();
             warnings.sort();
-            Verdict { valid: errors.is_empty(), errors, warnings }
+            Verdict {
+                valid: errors.is_empty(),
+                errors,
+                warnings,
+            }
         }
     }
 }
 
 fn python_verdicts(files: &[PathBuf]) -> Option<BTreeMap<String, Verdict>> {
     let script = root().join("tools/hooks/check_profile.py");
-    let out = Command::new("python3").arg(script).arg("--any-path").arg("--json").args(files).output().ok()?;
+    let out = Command::new("python3")
+        .arg(script)
+        .arg("--any-path")
+        .arg("--json")
+        .args(files)
+        .output()
+        .ok()?;
     let text = String::from_utf8(out.stdout).unwrap();
     let mut map = BTreeMap::new();
     for line in text.lines().filter(|l| l.starts_with('{')) {
         let v: serde_json::Value = serde_json::from_str(line).unwrap();
         let list = |k: &str| -> Vec<String> {
-            let mut l: Vec<String> =
-                v[k].as_array().unwrap().iter().map(|s| path_of(s.as_str().unwrap())).collect();
+            let mut l: Vec<String> = v[k]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|s| path_of(s.as_str().unwrap()))
+                .collect();
             l.sort();
             l
         };
         let errors = list("errors");
         map.insert(
             v["file"].as_str().unwrap().to_owned(),
-            Verdict { valid: v["valid"].as_bool().unwrap(), errors, warnings: list("warnings") },
+            Verdict {
+                valid: v["valid"].as_bool().unwrap(),
+                errors,
+                warnings: list("warnings"),
+            },
         );
     }
     Some(map)
@@ -84,7 +109,12 @@ fn python_verdicts(files: &[PathBuf]) -> Option<BTreeMap<String, Verdict>> {
 #[test]
 fn verdicts_match_expectations() {
     let (valid, invalid) = fixtures();
-    assert!(valid.len() >= 12 && invalid.len() >= 60, "{} valid, {} invalid", valid.len(), invalid.len());
+    assert!(
+        valid.len() >= 12 && invalid.len() >= 60,
+        "{} valid, {} invalid",
+        valid.len(),
+        invalid.len()
+    );
     for f in &valid {
         let v = rust_verdict(f);
         assert!(v.valid, "{} should be valid: {:?}", f.display(), v.errors);
@@ -124,7 +154,14 @@ fn schema() -> J {
 }
 
 fn prop_keys(obj: &J) -> Vec<String> {
-    let mut k: Vec<String> = obj.get("properties").unwrap().as_obj().unwrap().iter().map(|(k, _)| k.clone()).collect();
+    let mut k: Vec<String> = obj
+        .get("properties")
+        .unwrap()
+        .as_obj()
+        .unwrap()
+        .iter()
+        .map(|(k, _)| k.clone())
+        .collect();
     k.sort();
     k
 }
@@ -145,14 +182,35 @@ fn schema_keys_match_validator() {
     assert_eq!(prop_keys(defs.get("write").unwrap()), sorted(&validate::WRITE_KEYS));
     assert_eq!(prop_keys(defs.get("command").unwrap()), sorted(&validate::CMD_KEYS));
     assert_eq!(prop_keys(props.get("source").unwrap()), sorted(&validate::SOURCE_KEYS));
-    assert_eq!(prop_keys(props.get("capabilities").unwrap()), sorted(&validate::CAP_KEYS));
+    assert_eq!(
+        prop_keys(props.get("capabilities").unwrap()),
+        sorted(&validate::CAP_KEYS)
+    );
     let transport = props.get("transport").unwrap().get("properties").unwrap();
     assert_eq!(prop_keys(transport.get("rtu").unwrap()), sorted(&validate::RTU_KEYS));
     assert_eq!(prop_keys(transport.get("tcp").unwrap()), sorted(&validate::TCP_KEYS));
-    let hw = props.get("evidence").unwrap().get("properties").unwrap().get("hardware").unwrap().get("items").unwrap();
+    let hw = props
+        .get("evidence")
+        .unwrap()
+        .get("properties")
+        .unwrap()
+        .get("hardware")
+        .unwrap()
+        .get("items")
+        .unwrap();
     assert_eq!(prop_keys(hw), sorted(&validate::HW_KEYS));
     // RTU unit ID 0 is never allowed as a default.
-    assert_eq!(transport.get("rtu").unwrap().get("properties").unwrap().get("unit_id").unwrap().get("minimum"), Some(&J::Int(1)));
+    assert_eq!(
+        transport
+            .get("rtu")
+            .unwrap()
+            .get("properties")
+            .unwrap()
+            .get("unit_id")
+            .unwrap()
+            .get("minimum"),
+        Some(&J::Int(1))
+    );
 }
 
 fn random_leaf(r: &mut SplitMix64) -> J {
@@ -163,7 +221,19 @@ fn random_leaf(r: &mut SplitMix64) -> J {
         3 => J::Int(i128::from(r.below(10))),
         4 => J::Float(r.unit_f64() * 200.0 - 100.0),
         5 => J::Str(String::new()),
-        6 => J::Str(["read_write", "holding_register", "ABCD", "u32", "x", "=1", "simulated", "1.0.0"][r.below(8) as usize].into()),
+        6 => J::Str(
+            [
+                "read_write",
+                "holding_register",
+                "ABCD",
+                "u32",
+                "x",
+                "=1",
+                "simulated",
+                "1.0.0",
+            ][r.below(8) as usize]
+                .into(),
+        ),
         7 => J::Arr(vec![J::Int(1), J::Float(0.5)]),
         _ => J::Obj(vec![("en".into(), J::Str("a".into()))]),
     }
@@ -201,7 +271,10 @@ fn mutate(r: &mut SplitMix64, v: &mut J, depth: u32) {
 #[test]
 fn mutated_documents_never_panic_and_valid_ones_load() {
     let (valid, _) = fixtures();
-    let docs: Vec<J> = valid.iter().map(|f| json::parse(&std::fs::read(f).unwrap()).unwrap()).collect();
+    let docs: Vec<J> = valid
+        .iter()
+        .map(|f| json::parse(&std::fs::read(f).unwrap()).unwrap())
+        .collect();
     let mut still_valid = 0u32;
     check("profile_mutation", 2000, |r| {
         let mut d = r.pick(&docs).unwrap().clone();
@@ -213,7 +286,11 @@ fn mutated_documents_never_panic_and_valid_ones_load() {
         let loaded = profile::load(&text);
         if report.is_valid() {
             still_valid += 1;
-            assert!(loaded.is_ok(), "valid document must load into the typed model: {:?}", loaded.err());
+            assert!(
+                loaded.is_ok(),
+                "valid document must load into the typed model: {:?}",
+                loaded.err()
+            );
         }
     });
     assert!(still_valid > 0);
@@ -222,7 +299,10 @@ fn mutated_documents_never_panic_and_valid_ones_load() {
 #[test]
 fn rust_and_python_agree_on_mutated_documents() {
     let (valid, _) = fixtures();
-    let docs: Vec<J> = valid.iter().map(|f| json::parse(&std::fs::read(f).unwrap()).unwrap()).collect();
+    let docs: Vec<J> = valid
+        .iter()
+        .map(|f| json::parse(&std::fs::read(f).unwrap()).unwrap())
+        .collect();
     let dir = std::env::temp_dir().join(format!("buslink-agree-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let mut files = Vec::new();
@@ -244,7 +324,12 @@ fn rust_and_python_agree_on_mutated_documents() {
             .filter_map(|f| {
                 let p = &py[&f.to_string_lossy().to_string()];
                 let r = rust_verdict(f);
-                (*p != r).then(|| format!("{}\n  python: {p:?}\n  rust:   {r:?}", std::fs::read_to_string(f).unwrap()))
+                (*p != r).then(|| {
+                    format!(
+                        "{}\n  python: {p:?}\n  rust:   {r:?}",
+                        std::fs::read_to_string(f).unwrap()
+                    )
+                })
             })
             .collect::<Vec<_>>()
     });

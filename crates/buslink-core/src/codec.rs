@@ -126,7 +126,9 @@ impl DataType {
             TypeName::U64 => DataType::U64,
             TypeName::I64 => DataType::I64,
             TypeName::F64 => DataType::F64,
-            TypeName::String => DataType::Str { len: length.filter(|l| (1..=125).contains(l))? },
+            TypeName::String => DataType::Str {
+                len: length.filter(|l| (1..=125).contains(l))?,
+            },
         })
     }
 
@@ -295,7 +297,10 @@ fn be_bytes(regs: &[u16]) -> Vec<u8> {
 pub fn decode(ty: DataType, order: Option<WordOrder>, regs: &[u16]) -> Result<RawValue, CodecError> {
     let width = usize::from(ty.width());
     if regs.len() != width {
-        return Err(CodecError::Width { expected: width, got: regs.len() });
+        return Err(CodecError::Width {
+            expected: width,
+            got: regs.len(),
+        });
     }
     let canon = |o: Option<WordOrder>| -> Result<Vec<u8>, CodecError> { Ok(be_bytes(&need_order(o)?.apply(regs))) };
     Ok(match ty {
@@ -340,7 +345,10 @@ fn arr8(b: &[u8]) -> [u8; 8] {
 }
 
 fn words(bytes: &[u8]) -> Vec<u16> {
-    bytes.chunks(2).map(|c| u16::from_be_bytes([c[0], *c.get(1).unwrap_or(&0)])).collect()
+    bytes
+        .chunks(2)
+        .map(|c| u16::from_be_bytes([c[0], *c.get(1).unwrap_or(&0)]))
+        .collect()
 }
 
 /// Encode a raw value into registers in wire order.
@@ -368,7 +376,12 @@ pub fn encode(ty: DataType, order: Option<WordOrder>, value: &RawValue) -> Resul
             b.resize(cap, 0);
             return Ok(o.apply(&words(&b)));
         }
-        _ => return Err(CodecError::Width { expected: usize::from(ty.width()), got: 0 }),
+        _ => {
+            return Err(CodecError::Width {
+                expected: usize::from(ty.width()),
+                got: 0,
+            });
+        }
     };
     Ok(need_order(order)?.apply(&canon))
 }
@@ -386,13 +399,21 @@ impl Scaling {
     /// Same conversion without the range check (old values and read-backs are
     /// reported even when outside `valid_range`).
     pub fn without_range(&self) -> Scaling {
-        Scaling { valid_range: None, ..self.clone() }
+        Scaling {
+            valid_range: None,
+            ..self.clone()
+        }
     }
 }
 
 impl Default for Scaling {
     fn default() -> Self {
-        Self { scale: 1.0, offset: 0.0, valid_range: None, sentinels: Vec::new() }
+        Self {
+            scale: 1.0,
+            offset: 0.0,
+            valid_range: None,
+            sentinels: Vec::new(),
+        }
     }
 }
 
@@ -471,7 +492,10 @@ pub fn to_raw(ty: DataType, engineering: f64, scale: f64, offset: f64) -> Result
 
 /// Decode the same registers in all four orders (register inspector).
 pub fn decode_all_orders(ty: DataType, regs: &[u16]) -> Vec<(WordOrder, Result<RawValue, CodecError>)> {
-    WordOrder::ALL.into_iter().map(|o| (o, decode(ty, Some(o), regs))).collect()
+    WordOrder::ALL
+        .into_iter()
+        .map(|o| (o, decode(ty, Some(o), regs)))
+        .collect()
 }
 
 #[cfg(test)]
@@ -487,7 +511,11 @@ mod tests {
             (WordOrder::DCBA, [0x79E9, 0xF642]),
         ];
         for (o, wire) in expect {
-            assert_eq!(encode(DataType::F32, Some(o), &RawValue::F32(123.456)).unwrap(), wire.to_vec(), "{o:?}");
+            assert_eq!(
+                encode(DataType::F32, Some(o), &RawValue::F32(123.456)).unwrap(),
+                wire.to_vec(),
+                "{o:?}"
+            );
             assert_eq!(decode(DataType::F32, Some(o), &wire).unwrap(), RawValue::F32(123.456));
         }
     }
@@ -495,13 +523,33 @@ mod tests {
     #[test]
     fn integers_in_all_orders() {
         let v: u32 = 0x1122_3344;
-        assert_eq!(encode(DataType::U32, Some(WordOrder::ABCD), &RawValue::U32(v)).unwrap(), vec![0x1122, 0x3344]);
-        assert_eq!(encode(DataType::U32, Some(WordOrder::CDAB), &RawValue::U32(v)).unwrap(), vec![0x3344, 0x1122]);
-        assert_eq!(encode(DataType::U32, Some(WordOrder::BADC), &RawValue::U32(v)).unwrap(), vec![0x2211, 0x4433]);
-        assert_eq!(encode(DataType::U32, Some(WordOrder::DCBA), &RawValue::U32(v)).unwrap(), vec![0x4433, 0x2211]);
+        assert_eq!(
+            encode(DataType::U32, Some(WordOrder::ABCD), &RawValue::U32(v)).unwrap(),
+            vec![0x1122, 0x3344]
+        );
+        assert_eq!(
+            encode(DataType::U32, Some(WordOrder::CDAB), &RawValue::U32(v)).unwrap(),
+            vec![0x3344, 0x1122]
+        );
+        assert_eq!(
+            encode(DataType::U32, Some(WordOrder::BADC), &RawValue::U32(v)).unwrap(),
+            vec![0x2211, 0x4433]
+        );
+        assert_eq!(
+            encode(DataType::U32, Some(WordOrder::DCBA), &RawValue::U32(v)).unwrap(),
+            vec![0x4433, 0x2211]
+        );
         let regs = [0xFFFF, 0xFFFE];
-        assert_eq!(decode(DataType::I32, Some(WordOrder::ABCD), &regs).unwrap(), RawValue::I32(-2));
-        let w = encode(DataType::U64, Some(WordOrder::CDAB), &RawValue::U64(0x0102_0304_0506_0708)).unwrap();
+        assert_eq!(
+            decode(DataType::I32, Some(WordOrder::ABCD), &regs).unwrap(),
+            RawValue::I32(-2)
+        );
+        let w = encode(
+            DataType::U64,
+            Some(WordOrder::CDAB),
+            &RawValue::U64(0x0102_0304_0506_0708),
+        )
+        .unwrap();
         assert_eq!(w, vec![0x0708, 0x0506, 0x0304, 0x0102]);
         let f = encode(DataType::F64, Some(WordOrder::DCBA), &RawValue::F64(1.0)).unwrap();
         assert_eq!(f, vec![0x0000, 0x0000, 0x0000, 0xF03F]);
@@ -513,24 +561,36 @@ mod tests {
         let w = encode(DataType::U64, Some(WordOrder::ABCD), &v).unwrap();
         let back = decode(DataType::U64, Some(WordOrder::ABCD), &w).unwrap();
         assert_eq!(back.as_i128(), Some(i128::from(u64::MAX - 1)));
-        assert_eq!(serde_json::to_string(&back).unwrap(), r#"{"type":"u64","value":"18446744073709551614"}"#);
+        assert_eq!(
+            serde_json::to_string(&back).unwrap(),
+            r#"{"type":"u64","value":"18446744073709551614"}"#
+        );
     }
 
     #[test]
     fn soil_temperature_sign_and_scale() {
         // 65501 → −35 raw → −3.5 °C (BGT-SMPS temperature is i16 ÷ 10).
         let raw = decode(DataType::I16, None, &[65_501]).unwrap();
-        let s = Scaling { scale: 0.1, ..Scaling::default() };
+        let s = Scaling {
+            scale: 0.1,
+            ..Scaling::default()
+        };
         let v = to_engineering(&raw, &s).unwrap().unwrap();
         assert!((v + 3.5).abs() < 1e-9);
     }
 
     #[test]
     fn width_and_order_errors() {
-        assert_eq!(decode(DataType::U32, Some(WordOrder::ABCD), &[1]), Err(CodecError::Width { expected: 2, got: 1 }));
+        assert_eq!(
+            decode(DataType::U32, Some(WordOrder::ABCD), &[1]),
+            Err(CodecError::Width { expected: 2, got: 1 })
+        );
         assert_eq!(decode(DataType::U32, None, &[1, 2]), Err(CodecError::MissingWordOrder));
         assert_eq!(decode(DataType::Bool, None, &[2]), Err(CodecError::BoolValue(2)));
-        assert_eq!(decode(DataType::Str { len: 2 }, Some(WordOrder::CDAB), &[1, 2]), Err(CodecError::StringOrder));
+        assert_eq!(
+            decode(DataType::Str { len: 2 }, Some(WordOrder::CDAB), &[1, 2]),
+            Err(CodecError::StringOrder)
+        );
         assert!(decode(DataType::Str { len: 1 }, None, &[0xFFFE]).is_err());
     }
 
@@ -538,30 +598,64 @@ mod tests {
     fn strings() {
         let regs = encode(DataType::Str { len: 3 }, None, &RawValue::Str("ABC".into())).unwrap();
         assert_eq!(regs, vec![0x4142, 0x4300, 0x0000]);
-        let swapped = encode(DataType::Str { len: 3 }, Some(WordOrder::BADC), &RawValue::Str("ABC".into())).unwrap();
+        let swapped = encode(
+            DataType::Str { len: 3 },
+            Some(WordOrder::BADC),
+            &RawValue::Str("ABC".into()),
+        )
+        .unwrap();
         assert_eq!(swapped, vec![0x4241, 0x0043, 0x0000]);
-        assert_eq!(decode(DataType::Str { len: 3 }, Some(WordOrder::BADC), &swapped).unwrap(), RawValue::Str("ABC".into()));
+        assert_eq!(
+            decode(DataType::Str { len: 3 }, Some(WordOrder::BADC), &swapped).unwrap(),
+            RawValue::Str("ABC".into())
+        );
         assert!(encode(DataType::Str { len: 1 }, None, &RawValue::Str("ABC".into())).is_err());
     }
 
     #[test]
     fn sentinels_range_and_non_finite() {
-        let s = Scaling { scale: 0.1, offset: 0.0, valid_range: Some([-30.0, 70.0]), sentinels: vec![32_767] };
-        assert_eq!(to_engineering(&RawValue::I16(32_767), &s), Err(CodecError::Sentinel("32767".into())));
-        assert!(matches!(to_engineering(&RawValue::I16(800), &s), Err(CodecError::OutOfRange { .. })));
+        let s = Scaling {
+            scale: 0.1,
+            offset: 0.0,
+            valid_range: Some([-30.0, 70.0]),
+            sentinels: vec![32_767],
+        };
+        assert_eq!(
+            to_engineering(&RawValue::I16(32_767), &s),
+            Err(CodecError::Sentinel("32767".into()))
+        );
+        assert!(matches!(
+            to_engineering(&RawValue::I16(800), &s),
+            Err(CodecError::OutOfRange { .. })
+        ));
         assert!(to_engineering(&RawValue::I16(700), &s).is_ok());
         let plain = Scaling::default();
-        assert_eq!(to_engineering(&RawValue::F32(f32::NAN), &plain), Err(CodecError::NonFinite));
-        assert_eq!(to_engineering(&RawValue::F64(f64::INFINITY), &plain), Err(CodecError::NonFinite));
+        assert_eq!(
+            to_engineering(&RawValue::F32(f32::NAN), &plain),
+            Err(CodecError::NonFinite)
+        );
+        assert_eq!(
+            to_engineering(&RawValue::F64(f64::INFINITY), &plain),
+            Err(CodecError::NonFinite)
+        );
         assert_eq!(to_engineering(&RawValue::Str("x".into()), &plain), Ok(None));
     }
 
     #[test]
     fn to_raw_rejects_instead_of_rounding() {
         assert_eq!(to_raw(DataType::U16, 30.0, 0.01, 0.0), Ok(RawValue::U16(3000)));
-        assert_eq!(to_raw(DataType::U16, 30.005, 0.01, 0.0), Err(CodecError::NotRepresentable(30.005)));
-        assert_eq!(to_raw(DataType::U16, -1.0, 1.0, 0.0), Err(CodecError::OutOfTypeRange(-1.0)));
-        assert_eq!(to_raw(DataType::U16, 65_536.0, 1.0, 0.0), Err(CodecError::OutOfTypeRange(65_536.0)));
+        assert_eq!(
+            to_raw(DataType::U16, 30.005, 0.01, 0.0),
+            Err(CodecError::NotRepresentable(30.005))
+        );
+        assert_eq!(
+            to_raw(DataType::U16, -1.0, 1.0, 0.0),
+            Err(CodecError::OutOfTypeRange(-1.0))
+        );
+        assert_eq!(
+            to_raw(DataType::U16, 65_536.0, 1.0, 0.0),
+            Err(CodecError::OutOfTypeRange(65_536.0))
+        );
         assert_eq!(to_raw(DataType::I16, -3.5, 0.1, 0.0), Ok(RawValue::I16(-35)));
         assert_eq!(to_raw(DataType::Bool, 1.0, 1.0, 0.0), Ok(RawValue::Bool(true)));
         assert!(to_raw(DataType::Bool, 2.0, 1.0, 0.0).is_err());

@@ -41,7 +41,10 @@ pub fn load(bytes: &[u8]) -> Result<LoadedProfile, ProfileError> {
         return Err(ProfileError::Invalid(report.errors));
     }
     let profile: Profile = serde_json::from_value(doc.to_value()).map_err(|e| ProfileError::Model(e.to_string()))?;
-    Ok(LoadedProfile { profile, warnings: report.warnings })
+    Ok(LoadedProfile {
+        profile,
+        warnings: report.warnings,
+    })
 }
 
 pub fn load_str(text: &str) -> Result<LoadedProfile, ProfileError> {

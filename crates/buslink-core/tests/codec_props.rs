@@ -1,5 +1,5 @@
 //! Property test P6: codec round trip for every type × word order, and word-order algebra.
-#![allow(clippy::unwrap_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::type_complexity)]
 
 use buslink_core::codec::{self, DataType, RawValue, WordOrder};
 use buslink_core::rng::SplitMix64;
@@ -82,8 +82,14 @@ fn word_order_algebra() {
         for o in WordOrder::ALL {
             assert_eq!(o.apply(&o.apply(&regs)), regs, "{o:?} is an involution");
         }
-        assert_eq!(WordOrder::DCBA.apply(&regs), WordOrder::CDAB.apply(&WordOrder::BADC.apply(&regs)));
-        assert_eq!(WordOrder::DCBA.apply(&regs), WordOrder::BADC.apply(&WordOrder::CDAB.apply(&regs)));
+        assert_eq!(
+            WordOrder::DCBA.apply(&regs),
+            WordOrder::CDAB.apply(&WordOrder::BADC.apply(&regs))
+        );
+        assert_eq!(
+            WordOrder::DCBA.apply(&regs),
+            WordOrder::BADC.apply(&WordOrder::CDAB.apply(&regs))
+        );
     });
 }
 

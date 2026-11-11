@@ -39,7 +39,9 @@ impl SampleBus {
     }
 
     pub fn subscribe(&self) -> BusSubscriber {
-        BusSubscriber { rx: self.tx.subscribe() }
+        BusSubscriber {
+            rx: self.tx.subscribe(),
+        }
     }
 
     /// A sink for [`crate::poll::worker::LinkWorker::spawn`].

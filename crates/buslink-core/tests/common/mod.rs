@@ -1,5 +1,5 @@
 //! Shared helpers for integration tests.
-#![allow(dead_code, clippy::unwrap_used)]
+#![allow(dead_code, clippy::unwrap_used, clippy::panic, clippy::type_complexity)]
 
 pub mod slave;
 
@@ -20,7 +20,10 @@ pub fn bundled(name: &str) -> Profile {
 pub fn rtu_link(id: &str) -> LinkConfig {
     LinkConfig {
         id: id.into(),
-        kind: LinkKind::Rtu { port: "COM7".into(), serial: SerialSettings::default_9600_8n1() },
+        kind: LinkKind::Rtu {
+            port: "COM7".into(),
+            serial: SerialSettings::default_9600_8n1(),
+        },
         min_inter_frame_ms: 0,
     }
 }
@@ -28,13 +31,23 @@ pub fn rtu_link(id: &str) -> LinkConfig {
 pub fn sim_link(id: &str) -> LinkConfig {
     LinkConfig {
         id: id.into(),
-        kind: LinkKind::Simulator { name: id.into(), serial: SerialSettings::default_9600_8n1() },
+        kind: LinkKind::Simulator {
+            name: id.into(),
+            serial: SerialSettings::default_9600_8n1(),
+        },
         min_inter_frame_ms: 0,
     }
 }
 
 pub fn tcp_link(id: &str, host: &str) -> LinkConfig {
-    LinkConfig { id: id.into(), kind: LinkKind::Tcp { host: host.into(), port: 1502 }, min_inter_frame_ms: 0 }
+    LinkConfig {
+        id: id.into(),
+        kind: LinkKind::Tcp {
+            host: host.into(),
+            port: 1502,
+        },
+        min_inter_frame_ms: 0,
+    }
 }
 
 /// Run the scheduler until the manual clock reaches `until_mono`, collecting samples.

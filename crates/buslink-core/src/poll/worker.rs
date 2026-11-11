@@ -58,7 +58,10 @@ impl LinkWorker {
         sink: SampleSink,
     ) -> std::io::Result<LinkWorker> {
         let (tx, rx) = mpsc::channel::<Msg>();
-        let status = Arc::new(Mutex::new(LinkStatus { state: LinkState::Running, counters: scheduler.counters() }));
+        let status = Arc::new(Mutex::new(LinkStatus {
+            state: LinkState::Running,
+            counters: scheduler.counters(),
+        }));
         let st = Arc::clone(&status);
         let name = format!("buslink-link-{}", scheduler.link().id);
         let handle = std::thread::Builder::new().name(name).spawn(move || {
@@ -107,11 +110,18 @@ impl LinkWorker {
                 s.counters = scheduler.counters();
             }
         })?;
-        Ok(LinkWorker { tx, status, handle: Some(handle) })
+        Ok(LinkWorker {
+            tx,
+            status,
+            handle: Some(handle),
+        })
     }
 
     pub fn handle(&self, timeout_ms: u64) -> LinkHandle {
-        LinkHandle { tx: self.tx.clone(), timeout_ms }
+        LinkHandle {
+            tx: self.tx.clone(),
+            timeout_ms,
+        }
     }
 
     pub fn status(&self) -> LinkStatus {

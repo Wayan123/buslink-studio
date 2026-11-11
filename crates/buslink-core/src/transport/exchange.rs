@@ -6,10 +6,10 @@
 use super::{Transport, TransportError};
 use crate::clock::Clock;
 use crate::command::PreparedFrame;
+use crate::protocol::FrameError;
 use crate::protocol::pdu::{EXCEPTION_FLAG, ExceptionCode, ExpectedReply, ReadRequest, exception_in};
 use crate::protocol::rtu::{self, FramerStatus, ResponseFramer};
 use crate::protocol::tcp::{self, MbapReceiver};
-use crate::protocol::FrameError;
 use crate::quality::Quality;
 use std::sync::Arc;
 use thiserror::Error;
@@ -202,7 +202,11 @@ impl Exchanger {
             Err(e) => return self.empty(unit, Vec::new(), Err(ExchangeError::Encode(e))),
         };
         self.wait_gap();
-        let quiet = if self.after_timeout { self.inter_frame_ms.max(self.late_guard_ms) } else { self.inter_frame_ms.max(2) };
+        let quiet = if self.after_timeout {
+            self.inter_frame_ms.max(self.late_guard_ms)
+        } else {
+            self.inter_frame_ms.max(2)
+        };
         let discarded = match t.drain(quiet) {
             Ok(n) => n,
             Err(e) => return self.empty(unit, adu, Err(ExchangeError::Link(e))),
@@ -287,12 +291,17 @@ impl Exchanger {
             while let Some(frame) = self.mbap.next_frame() {
                 match frame {
                     Err(e) => {
-                        rec.outcome = Err(ExchangeError::Link(TransportError::Io(format!("MBAP stream out of sync: {e}"))));
+                        rec.outcome = Err(ExchangeError::Link(TransportError::Io(format!(
+                            "MBAP stream out of sync: {e}"
+                        ))));
                         break 'wait;
                     }
                     Ok(f) if f.transaction_id != tid => rec.discarded += 1, // a late reply to an older request
                     Ok(f) if f.unit_id != unit => {
-                        rec.outcome = Err(ExchangeError::Decode(FrameError::WrongUnit { expected: unit, received: f.unit_id }));
+                        rec.outcome = Err(ExchangeError::Decode(FrameError::WrongUnit {
+                            expected: unit,
+                            received: f.unit_id,
+                        }));
                         break 'wait;
                     }
                     Ok(f) => {
@@ -329,17 +338,26 @@ fn check_tcp_shape(function: u8, expect: ExpectedReply, pdu: Vec<u8>) -> Result<
     let received = pdu.first().copied().unwrap_or(0);
     if received == function | EXCEPTION_FLAG {
         if pdu.len() != 2 {
-            return Err(ExchangeError::Decode(FrameError::Length { expected: 2, received: pdu.len() }));
+            return Err(ExchangeError::Decode(FrameError::Length {
+                expected: 2,
+                received: pdu.len(),
+            }));
         }
         return classify(function, pdu);
     }
     if received != function {
-        return Err(ExchangeError::Decode(FrameError::UnexpectedFunction { expected: function, received }));
+        return Err(ExchangeError::Decode(FrameError::UnexpectedFunction {
+            expected: function,
+            received,
+        }));
     }
     if let ExpectedReply::Fixed(n) = expect
         && pdu.len() != 1 + usize::from(n)
     {
-        return Err(ExchangeError::Decode(FrameError::Length { expected: 1 + usize::from(n), received: pdu.len() }));
+        return Err(ExchangeError::Decode(FrameError::Length {
+            expected: 1 + usize::from(n),
+            received: pdu.len(),
+        }));
     }
     Ok(pdu)
 }

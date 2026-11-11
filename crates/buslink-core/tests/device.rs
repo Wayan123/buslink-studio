@@ -1,5 +1,5 @@
 //! Device instance vs profile (Req 9) and bundled profile loading.
-#![allow(clippy::unwrap_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::type_complexity)]
 
 mod common;
 
@@ -43,11 +43,17 @@ fn profile_and_link_must_match() {
     let other = bundled("sim-vfd.json");
     let link = rtu_link("bus1");
     let d = DeviceInstance::from_profile("dev", "Device", &link, &p);
-    assert!(matches!(d.check(&other, &link), Err(DeviceError::ProfileMismatch { .. })));
+    assert!(matches!(
+        d.check(&other, &link),
+        Err(DeviceError::ProfileMismatch { .. })
+    ));
     let mut v2 = p.clone();
     v2.profile_version = "1.0.1".into();
     assert!(matches!(d.check(&v2, &link), Err(DeviceError::ProfileMismatch { .. })));
-    assert!(matches!(d.check(&p, &rtu_link("bus2")), Err(DeviceError::LinkMismatch { .. })));
+    assert!(matches!(
+        d.check(&p, &rtu_link("bus2")),
+        Err(DeviceError::LinkMismatch { .. })
+    ));
     let mut slow = d.clone();
     slow.poll_interval_ms = 10;
     assert_eq!(slow.check(&p, &link), Err(DeviceError::PollInterval(10)));
@@ -65,7 +71,11 @@ fn stale_threshold_and_owner_keys() {
     assert_eq!(d.stale_threshold_ms(), 15_000);
     d.stale_after_ms = Some(2000);
     assert_eq!(d.stale_threshold_ms(), 2000);
-    assert_eq!(rtu_link("a").owner_key(), rtu_link("b").owner_key(), "same COM port = same bus");
+    assert_eq!(
+        rtu_link("a").owner_key(),
+        rtu_link("b").owner_key(),
+        "same COM port = same bus"
+    );
     assert!(tcp_link("x", "127.0.0.1").is_loopback_tcp());
     assert!(!tcp_link("x", "192.168.1.10").is_loopback_tcp());
     assert!(!tcp_link("x", "localhost.evil.example").is_loopback_tcp());
@@ -73,7 +83,13 @@ fn stale_threshold_and_owner_keys() {
 
 #[test]
 fn every_bundled_profile_loads() {
-    for f in ["bgt-smps-8in1.json", "sim-vfd.json", "sim-temp-controller.json", "sim-energy-meter.json", "generic-holding.json"] {
+    for f in [
+        "bgt-smps-8in1.json",
+        "sim-vfd.json",
+        "sim-temp-controller.json",
+        "sim-energy-meter.json",
+        "generic-holding.json",
+    ] {
         let p = bundled(f);
         assert!(p.registers.iter().all(|r| r.data_type().is_some()), "{f}");
         if p.simulated_only {

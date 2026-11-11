@@ -67,7 +67,15 @@ pub struct ResponseFramer {
 
 impl ResponseFramer {
     pub fn new(unit: u8, function: u8, expect: ExpectedReply) -> Self {
-        Self { unit, function, expect, buf: Vec::with_capacity(MAX_ADU_LEN), needed: None, trailing: 0, done: None }
+        Self {
+            unit,
+            function,
+            expect,
+            buf: Vec::with_capacity(MAX_ADU_LEN),
+            needed: None,
+            trailing: 0,
+            done: None,
+        }
     }
 
     /// Bytes received so far for this frame (including any trailing bytes).
@@ -89,7 +97,10 @@ impl ResponseFramer {
             return Ok(Some(5));
         }
         if fc != self.function {
-            return Err(FrameError::UnexpectedFunction { expected: self.function, received: fc });
+            return Err(FrameError::UnexpectedFunction {
+                expected: self.function,
+                received: fc,
+            });
         }
         match self.expect {
             ExpectedReply::Fixed(n) => Ok(Some(4 + usize::from(n))),
@@ -121,7 +132,13 @@ impl ResponseFramer {
         }
         FramerStatus::NeedMore(match self.needed {
             Some(n) => n - self.buf.len(),
-            None => if self.buf.len() < 2 { 2 - self.buf.len() } else { 1 },
+            None => {
+                if self.buf.len() < 2 {
+                    2 - self.buf.len()
+                } else {
+                    1
+                }
+            }
         })
     }
 
@@ -135,7 +152,10 @@ impl ResponseFramer {
     fn validate(&self, n: usize) -> Result<Vec<u8>, FrameError> {
         let (unit, pdu) = decode_adu(&self.buf[..n])?;
         if unit != self.unit {
-            return Err(FrameError::WrongUnit { expected: self.unit, received: unit });
+            return Err(FrameError::WrongUnit {
+                expected: self.unit,
+                received: unit,
+            });
         }
         Ok(pdu.to_vec())
     }
@@ -160,7 +180,12 @@ pub struct SerialSettings {
 
 impl SerialSettings {
     pub const fn new(baud: u32, data_bits: u8, parity: Parity, stop_bits: u8) -> Self {
-        Self { baud, data_bits, parity, stop_bits }
+        Self {
+            baud,
+            data_bits,
+            parity,
+            stop_bits,
+        }
     }
 
     /// 9600 8N1, the BGT-SMPS default.
@@ -200,9 +225,17 @@ impl RtuTiming {
         let baud = u64::from(s.baud.max(1));
         let char_us = (u64::from(s.bits_per_char()) * 1_000_000).div_ceil(baud);
         if s.baud > 19_200 {
-            Self { char_us, t15_us: 750, t35_us: 1_750 }
+            Self {
+                char_us,
+                t15_us: 750,
+                t35_us: 1_750,
+            }
         } else {
-            Self { char_us, t15_us: (char_us * 3).div_ceil(2), t35_us: (char_us * 7).div_ceil(2) }
+            Self {
+                char_us,
+                t15_us: (char_us * 3).div_ceil(2),
+                t35_us: (char_us * 7).div_ceil(2),
+            }
         }
     }
 
@@ -225,7 +258,10 @@ mod tests {
 
     #[test]
     fn known_frame() {
-        assert_eq!(encode_adu(1, &[0x03, 0, 0, 0, 8]).unwrap(), unhex("01 03 00 00 00 08 44 0C"));
+        assert_eq!(
+            encode_adu(1, &[0x03, 0, 0, 0, 8]).unwrap(),
+            unhex("01 03 00 00 00 08 44 0C")
+        );
         assert_eq!(encode_adu(1, &[]), Err(FrameError::EmptyPdu));
         assert!(encode_adu(1, &[0u8; 254]).is_err());
         assert!(encode_adu(1, &[3u8; 253]).is_ok());
@@ -256,14 +292,23 @@ mod tests {
         let mut f = framer();
         let mut frame = encode_adu(1, &[0x03, 0x02, 0x01, 0x0A]).unwrap();
         frame[6] ^= 0xFF;
-        assert!(matches!(f.push(&frame), FramerStatus::Complete(Err(FrameError::Crc { .. }))));
+        assert!(matches!(
+            f.push(&frame),
+            FramerStatus::Complete(Err(FrameError::Crc { .. }))
+        ));
     }
 
     #[test]
     fn wrong_unit_is_decode_error_after_crc() {
         let mut f = framer();
         let frame = encode_adu(2, &[0x03, 0x02, 0x01, 0x0A]).unwrap();
-        assert_eq!(f.push(&frame), FramerStatus::Complete(Err(FrameError::WrongUnit { expected: 1, received: 2 })));
+        assert_eq!(
+            f.push(&frame),
+            FramerStatus::Complete(Err(FrameError::WrongUnit {
+                expected: 1,
+                received: 2
+            }))
+        );
     }
 
     #[test]
@@ -271,7 +316,10 @@ mod tests {
         let mut f = framer();
         assert_eq!(
             f.push(&[0x01, 0x04]),
-            FramerStatus::Complete(Err(FrameError::UnexpectedFunction { expected: 3, received: 4 }))
+            FramerStatus::Complete(Err(FrameError::UnexpectedFunction {
+                expected: 3,
+                received: 4
+            }))
         );
     }
 

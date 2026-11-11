@@ -410,7 +410,10 @@ impl Profile {
     }
 
     pub fn capability(&self, f: impl Fn(&Capabilities) -> Option<CapabilityLevel>) -> CapabilityLevel {
-        self.capabilities.as_ref().and_then(f).unwrap_or(CapabilityLevel::Unsupported)
+        self.capabilities
+            .as_ref()
+            .and_then(f)
+            .unwrap_or(CapabilityLevel::Unsupported)
     }
 
     /// `profile_id@profile_version`, stored with every sample and export.

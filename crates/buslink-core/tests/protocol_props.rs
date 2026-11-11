@@ -1,5 +1,5 @@
 //! Property tests P1, P2, P4, P5 (design §11) for CRC, read PDUs, RTU and MBAP framing.
-#![allow(clippy::unwrap_used)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::type_complexity)]
 
 use buslink_core::protocol::crc::{self, crc16};
 use buslink_core::protocol::pdu::{
@@ -127,7 +127,11 @@ fn no_panic_on_random_bytes() {
         let bytes = r.bytes(len);
         let unit = r.next_u8();
         let fc = r.range_u64(1, 4) as u8;
-        let expect = if r.bool() { ExpectedReply::ByteCount } else { ExpectedReply::Fixed(r.next_u8()) };
+        let expect = if r.bool() {
+            ExpectedReply::ByteCount
+        } else {
+            ExpectedReply::Fixed(r.next_u8())
+        };
         let mut f = ResponseFramer::new(unit, fc, expect);
         let mut pos = 0;
         while pos < bytes.len() {
@@ -142,7 +146,9 @@ fn no_panic_on_random_bytes() {
         for _ in 0..4 {
             let _ = rx.next_frame();
         }
-        if let Some(req) = ReadFunction::from_code(fc).and_then(|f| ReadRequest::new(f, 0, r.range_u64(1, 125) as u16).ok()) {
+        if let Some(req) =
+            ReadFunction::from_code(fc).and_then(|f| ReadRequest::new(f, 0, r.range_u64(1, 125) as u16).ok())
+        {
             let _ = decode_read_response(&req, &bytes);
         }
     });
