@@ -832,6 +832,12 @@ dl.legend dd {
 
 /* ---------- narrow screens (Android, 360 px) ---------- */
 @media (max-width: 720px) {
+  .app-header {
+    position: static; /* a tall wrapped header must not cover a phone screen */
+  }
+  html {
+    scroll-padding-top: 1rem;
+  }
   .trend-layout {
     grid-template-columns: 1fr;
   }

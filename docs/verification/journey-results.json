@@ -1,0 +1,83 @@
+{
+  "date": "2026-11-11T22:01:38.807Z",
+  "platform": "Windows (WebView2 in the e2e build) + headless Chrome",
+  "steps": [
+    {
+      "name": "connect to app over CDP",
+      "ok": true,
+      "detail": "http://tauri.localhost/"
+    },
+    {
+      "name": "backend available in the app webview",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Training mode: 3 simulated devices GOOD",
+      "ok": true,
+      "detail": "bgt-smps-8in1-u1, sim-vfd-basic-u2, sim-temp-controller-basic-u3"
+    },
+    {
+      "name": "every training device card shows the 'Simulated device' banner",
+      "ok": true,
+      "detail": "3 banners"
+    },
+    {
+      "name": "inject TIMEOUT on unit 3 (15 s)",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "dashboard tiles show TIMEOUT with the last value kept",
+      "ok": true,
+      "detail": "TIMEOUT · 2 s"
+    },
+    {
+      "name": "separate communication alarm in the banner",
+      "ok": true,
+      "detail": "1021301 commOldest unacknowledged: Simulated temperature controller (simulated): Communication: TIMEOUT"
+    },
+    {
+      "name": "trend shows a gap 'No data: TIMEOUT'",
+      "ok": true,
+      "detail": "Simulated temperature controller (simulated): Process temperature (PV) — No data: TIMEOUT · 05:01:43–05:01:45 | Simulated temperature controller (simulated): Setpoint (SP) — No data: TIMEOUT · 05:01:43–05:01:45"
+    },
+    {
+      "name": "register inspector lists frames including the timeouts",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "export CSV with quality + age columns and TIMEOUT rows",
+      "ok": true,
+      "detail": "buslink-s1794434500299.csv: 287 rows, 24 TIMEOUT rows for sim-temp-controller-basic-u3, 262 GOOD rows; header: ts_utc,ts_ms,device_id,tag_id,value,text,unit,quality,exception_code,age_ms,value_ts_utc,raw_hex,seq,profile_id,profile_version"
+    },
+    {
+      "name": "app at 360 px: no horizontal page scroll",
+      "ok": true,
+      "detail": "overflow -15px"
+    },
+    {
+      "name": "dist/ in headless Chrome (en, 360px): no backend notice, no page overflow, targets ≥ 24 px",
+      "ok": true,
+      "detail": "{\"overflow\":0,\"lang\":\"en\",\"notice\":\"BusLink backend not available: this page runs outside the BusLink Studio app, so no device data is shown.\",\"smallTargets\":0}"
+    },
+    {
+      "name": "dist/ in headless Chrome (id, 360px): no backend notice, no page overflow, targets ≥ 24 px",
+      "ok": true,
+      "detail": "{\"overflow\":0,\"lang\":\"id\",\"notice\":\"Backend BusLink tidak tersedia: halaman ini berjalan di luar aplikasi BusLink Studio, jadi tidak ada data perangkat.\",\"smallTargets\":0}"
+    },
+    {
+      "name": "dist/ in headless Chrome (en, 1280px): no backend notice, no page overflow, targets ≥ 24 px",
+      "ok": true,
+      "detail": "{\"overflow\":0,\"lang\":\"en\",\"notice\":\"BusLink backend not available: this page runs outside the BusLink Studio app, so no device data is shown.\",\"smallTargets\":0}"
+    },
+    {
+      "name": "keyboard: first Tab focuses the skip link with a visible outline",
+      "ok": true,
+      "detail": "{\"cls\":\"skip\",\"outline\":\"solid\"}"
+    }
+  ],
+  "trend_render_note": "Raw samples from the live buffer · rendered in 4.1 ms",
+  "summary": "15/15 passed"
+}

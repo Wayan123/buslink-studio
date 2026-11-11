@@ -3,4 +3,4 @@ useDefault = true
 
 [allowlist]
 description = "Fake credentials used as fixtures to test the guard-write-paths hook"
-paths = ['''tools/hooks/tests/test_guard_writes\.py''', '''__pycache__/''']
+paths = ['''tools/hooks/tests/test_guard_writes\.py''', '''__pycache__/''', '''(^|/)target/''', '''node_modules/''', '''src-tauri/gen/android/.*/build/''']
