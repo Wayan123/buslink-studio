@@ -1,0 +1,25 @@
+{
+  "name": "buslink-studio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 1420 --strictPort",
+    "build": "tsc --noEmit && node scripts/check-i18n.mjs && node scripts/check-ui.mjs && vite build",
+    "check": "tsc --noEmit && node scripts/check-i18n.mjs && node scripts/check-ui.mjs",
+    "test": "node --test \"src/**/*.test.ts\"",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.12.4",
+    "uplot": "1.6.32"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.4",
+    "@types/node": "24.19.2",
+    "puppeteer-core": "25.17.0",
+    "typescript": "5.9.3",
+    "vite": "8.3.8"
+  }
+}

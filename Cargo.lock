@@ -32,6 +32,7 @@ name = "buslink-sim"
 version = "0.1.0"
 dependencies = [
  "buslink-core",
+ "serde",
  "thiserror",
 ]
 

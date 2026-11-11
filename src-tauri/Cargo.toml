@@ -1,0 +1,48 @@
+[package]
+name = "buslink-studio"
+version = "0.1.0"
+description = "BusLink Studio: Modbus RTU/TCP workbench (Windows, Android, LAN view)"
+edition = "2024"
+rust-version = "1.90"
+license = "Apache-2.0"
+publish = false
+
+# Not a member of the root workspace (see .kiro/steering/tech.md): Windows cargo.exe
+# builds this crate into src-tauri/target, Linux cargo tests crates/* into target/.
+[workspace]
+
+[lib]
+name = "buslink_studio_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "=2.7.4", features = [] }
+
+[dependencies]
+tauri = { version = "=2.12.5", features = [] }
+tauri-plugin-dialog = "=2.8.4"
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.154"
+buslink-core = { path = "../crates/buslink-core" }
+buslink-sim = { path = "../crates/buslink-sim" }
+
+[target.'cfg(windows)'.dependencies]
+serialport = { version = "=4.10.1", default-features = false }
+
+[features]
+# Set by the Tauri CLI for production builds (embeds dist/).
+custom-protocol = ["tauri/custom-protocol"]
+# Verification builds only: export writes into $BUSLINK_E2E_EXPORT_DIR instead of
+# opening the native save dialog, which CDP automation cannot drive. Off in the installer.
+e2e = []
+
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+
+[profile.release]
+strip = true

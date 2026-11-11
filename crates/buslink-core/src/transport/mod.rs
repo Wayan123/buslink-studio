@@ -7,6 +7,7 @@
 pub mod exchange;
 pub mod fake;
 pub mod tcp;
+pub mod usb_ids;
 
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};

@@ -33,6 +33,10 @@ pub enum Priority {
 
 pub type Reply<T> = Box<dyn FnOnce(T) + Send>;
 
+/// Observer for every exchange the scheduler runs (register inspector, diagnostics).
+/// It only sees records; it cannot change or resend anything.
+pub type FrameTap = Arc<dyn Fn(&ExchangeRecord) + Send + Sync>;
+
 /// Work that jumps the polling queue.
 pub enum UrgentJob {
     Read {
@@ -112,6 +116,7 @@ pub struct LinkScheduler {
     rr: usize,
     down: bool,
     backoff_cap_ms: u64,
+    tap: Option<FrameTap>,
 }
 
 fn reply_error(e: ReplyError) -> ExchangeError {
@@ -183,7 +188,19 @@ impl LinkScheduler {
             rr: 0,
             down: false,
             backoff_cap_ms: DEFAULT_BACKOFF_CAP_MS,
+            tap: None,
         })
+    }
+
+    /// Report every exchange record to `tap` (called on the worker thread; keep it short).
+    pub fn set_frame_tap(&mut self, tap: FrameTap) {
+        self.tap = Some(tap);
+    }
+
+    fn report(&self, rec: &ExchangeRecord) {
+        if let Some(tap) = &self.tap {
+            tap(rec);
+        }
     }
 
     pub fn set_backoff_cap_ms(&mut self, ms: u64) {
@@ -363,6 +380,7 @@ impl LinkScheduler {
                 ..
             } => {
                 let rec = self.exchanger.transact(t, unit, Outgoing::Read(&request), timeout_ms);
+                self.report(&rec);
                 self.count_unit(unit, &rec);
                 let lost = rec.outcome.as_ref().is_err_and(ExchangeError::is_link_lost);
                 let result = rec
@@ -380,6 +398,7 @@ impl LinkScheduler {
                 let rec = self
                     .exchanger
                     .transact(t, frame.unit(), Outgoing::Command(&frame), timeout_ms);
+                self.report(&rec);
                 self.count_unit(frame.unit(), &rec);
                 let lost = rec.outcome.as_ref().is_err_and(ExchangeError::is_link_lost);
                 reply(rec);
@@ -403,6 +422,7 @@ impl LinkScheduler {
             (d.instance.unit_id, d.blocks[cycle.block].request, d.timeout_ms)
         };
         let rec = self.exchanger.transact(t, unit, Outgoing::Read(&request), timeout);
+        self.report(&rec);
         let now_mono = self.clock.mono_ms();
         let now_utc = self.clock.utc_ms();
         count(&mut self.devices[i].counters, rec.outcome.as_ref().err());

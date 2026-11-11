@@ -1,0 +1,1 @@
+{"main":{"identifier":"main","description":"Main window: Tauri core only (events, window). No shell, file-system, HTTP or dialog permissions for the webview; file dialogs are opened from Rust.","local":true,"windows":["main"],"permissions":["core:default"]}}

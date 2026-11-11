@@ -6,6 +6,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod alarm;
 pub mod bus;
 pub mod clock;
 pub mod codec;
@@ -18,6 +19,8 @@ pub mod profile;
 pub mod protocol;
 pub mod quality;
 pub mod rng;
+pub mod session;
 pub mod testkit;
 pub mod time;
 pub mod transport;
+pub mod trend;

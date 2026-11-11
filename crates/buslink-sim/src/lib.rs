@@ -12,6 +12,7 @@ pub mod fault;
 pub mod image;
 pub mod server;
 pub mod tcp;
+pub mod training;
 pub mod transport;
 pub mod world;
 
