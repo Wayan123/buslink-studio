@@ -1,0 +1,17 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "typecheck-ui-on-save",
+      "trigger": "PostFileSave",
+      "description": "Type-check the web UI with npx tsc --noEmit when a UI file is saved; prints a hint and exits 0 if node_modules or tsconfig.json is missing.",
+      "matcher": "src/.*\\.(ts|css|html)$",
+      "action": {
+        "type": "command",
+        "command": "sh tools/hooks/typecheck_ui.sh",
+        "timeout": 180
+      },
+      "timeout": 180
+    }
+  ]
+}

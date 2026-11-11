@@ -1,0 +1,17 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "test-core-on-save",
+      "trigger": "PostFileSave",
+      "description": "Run the Rust workspace tests when a crate source file is saved.",
+      "matcher": "crates/.*\\.rs$",
+      "action": {
+        "type": "command",
+        "command": "cargo test --workspace --quiet 2>&1 | tail -n 60",
+        "timeout": 600
+      },
+      "timeout": 600
+    }
+  ]
+}

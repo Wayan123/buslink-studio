@@ -1,0 +1,17 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "profile-schema-check",
+      "trigger": "PostFileSave",
+      "description": "Validate a saved device profile against schema v1 (docs/profiles/schema-v1.md).",
+      "matcher": "profiles/.*\\.json$",
+      "action": {
+        "type": "command",
+        "command": "python3 tools/hooks/check_profile.py \"{{filePath}}\"",
+        "timeout": 30
+      },
+      "timeout": 30
+    }
+  ]
+}

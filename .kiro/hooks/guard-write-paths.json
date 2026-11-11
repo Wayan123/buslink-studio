@@ -1,0 +1,17 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "guard-write-paths",
+      "trigger": "PreToolUse",
+      "description": "Block edits that add Modbus write function codes/APIs outside the command service, simulator and tests, broadcast (unit ID 0) writes, and hard-coded secrets. Fails open on parse errors.",
+      "matcher": "^(fs_write|fs_append|str_replace)$",
+      "action": {
+        "type": "command",
+        "command": "python3 tools/hooks/guard_writes.py",
+        "timeout": 30
+      },
+      "timeout": 30
+    }
+  ]
+}

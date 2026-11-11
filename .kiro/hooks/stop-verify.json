@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "stop-verify",
+      "trigger": "Stop",
+      "description": "Before the agent stops, run cargo check --workspace; if it fails, return a continue decision with the compiler errors (gives up after 3 identical failures).",
+      "action": {
+        "type": "command",
+        "command": "python3 tools/hooks/stop_verify.py",
+        "timeout": 600
+      },
+      "timeout": 600
+    }
+  ]
+}
