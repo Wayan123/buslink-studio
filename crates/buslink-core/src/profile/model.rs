@@ -331,6 +331,24 @@ pub struct Command {
     pub expected: Option<f64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timeout_ms: Option<u32>,
+    /// Live register that shows whether the process reached the target (not the read-back).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feedback: Option<Feedback>,
+}
+
+/// "Process reached target" check for a command (commissioning-control design §5).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Feedback {
+    pub register: String,
+    pub tolerance: f64,
+    pub timeout_ms: u32,
+    /// Target in engineering units; absent = the value entered for a setpoint.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<f64>,
+    /// Compare one bit of a bitfield register with `value` (0 or 1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bit: Option<u8>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

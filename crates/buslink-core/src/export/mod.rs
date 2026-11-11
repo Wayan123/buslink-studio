@@ -6,6 +6,7 @@
 
 pub mod csv;
 pub mod json;
+pub mod report;
 pub mod xlsx;
 
 use crate::historian::{AuditRow, DeviceRow, EventRow, Historian, HistorianError, SessionInfo, StoredSample};
@@ -81,6 +82,32 @@ pub const MEASUREMENT_COLUMNS: [&str; 15] = [
     "seq",
     "profile_id",
     "profile_version",
+];
+
+pub const AUDIT_COLUMNS: [&str; 23] = [
+    "ts_utc",
+    "session_id",
+    "user",
+    "role",
+    "event",
+    "device_id",
+    "profile_id",
+    "profile_version",
+    "unit_id",
+    "function",
+    "address",
+    "register_id",
+    "command_id",
+    "old_value",
+    "requested_value",
+    "raw_value_hex",
+    "request_hex",
+    "response_hex",
+    "exception",
+    "ack",
+    "readback",
+    "readback_value",
+    "note",
 ];
 
 #[cfg(test)]

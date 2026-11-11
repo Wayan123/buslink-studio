@@ -8,7 +8,7 @@ import { clear, h } from "../dom.ts";
 import { fmtLocalTime, fmtNumber, fmtUtc } from "../format.ts";
 import { lang, t, tx } from "../i18n.ts";
 import { loadProfiles, profileOf } from "../profiles.ts";
-import { align, bufferToSeries, NO_DATA, type Series } from "../series.ts";
+import { align, bufferToSeries, firstPointMs, liveBounds, NO_DATA, type Series } from "../series.ts";
 import { store } from "../store.ts";
 import { cssVar, onThemeChange } from "../theme.ts";
 import type { AlarmView, DeviceView, Gap, Register } from "../types.ts";
@@ -124,7 +124,11 @@ export function trendsView(params: { device?: string } = {}): View {
 
   function bounds(): { from: number; to: number } {
     const now = Date.now();
-    if (range in LIVE) return { from: now - (LIVE[range] ?? 300_000), to: now };
+    if (range in LIVE) {
+      // Auto-fit from the first buffered point of the selected tags, capped at the chosen window.
+      const first = firstPointMs(tagRefs().map((tg) => store.buffers.get(tg.key)));
+      return liveBounds(now, LIVE[range] ?? 300_000, first);
+    }
     if (range in HIST) return { from: now - (HIST[range] ?? 3_600_000), to: now };
     return { from: 0, to: now };
   }

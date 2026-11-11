@@ -9,10 +9,11 @@ use buslink_core::clock::{Clock, ManualClock};
 use buslink_core::command::audit::{AuditEvent, MemoryAudit};
 use buslink_core::command::wire::WriteRequest;
 use buslink_core::command::{
-    Ack, CommandConfig, CommandError, CommandRequest, CommandService, CommandState, CommandTarget, DirectLink,
-    DisarmReason, Operator, Readback, Role,
+    Ack, CommSettingKind, CommandConfig, CommandError, CommandRequest, CommandService, CommandState, CommandTarget,
+    DirectLink, DisarmReason, Operator, Readback, Role,
 };
 use buslink_core::device::{DeviceInstance, LinkConfig};
+use buslink_core::profile::Apply;
 use buslink_core::protocol::rtu;
 use buslink_core::testkit::check;
 use buslink_core::transport::exchange::{Exchanger, Framing};
@@ -34,8 +35,24 @@ impl World {
         let clock = ManualClock::shared(1_800_000_000_000);
         let bus = Bus::new();
         // VFD at unit 2: control 0, setpoint 0, ramp 5.0 s, rest 0. Temp controller at unit 3.
-        bus.add(2, &[(0, 0), (1, 0), (2, 50), (3, 0), (4, 0), (5, 0), (6, 0)]);
-        bus.add(3, &[(0, 250), (1, 400), (2, 0), (3, 0), (4, 0), (5, 0)]);
+        bus.add(
+            2,
+            &[
+                (0, 0),
+                (1, 0),
+                (2, 50),
+                (3, 0),
+                (4, 0),
+                (5, 0),
+                (6, 0),
+                (10, 2),
+                (11, 1),
+            ],
+        );
+        bus.add(
+            3,
+            &[(0, 250), (1, 400), (2, 0), (3, 0), (4, 0), (5, 0), (10, 3), (11, 1)],
+        );
         let (t, h) = FakeTransport::new(clock.clone(), bus.responder());
         let ex = Exchanger::new(Framing::Rtu, clock.clone() as Arc<dyn Clock>, 5);
         Self { clock, bus, t, h, ex }
@@ -138,7 +155,7 @@ fn happy_path_preview_confirm_execute_readback_audit() {
     assert_eq!((last.user.as_str(), last.role.as_str()), ("tech1", "operator"));
     assert_eq!(
         (last.profile_id.as_str(), last.profile_version.as_str()),
-        ("sim.vfd-basic", "1.0.0")
+        ("sim.vfd-basic", "1.1.0")
     );
     assert_eq!(
         (last.function, last.address, last.old_value, last.requested_value),
@@ -618,4 +635,159 @@ fn state_machine_never_sends_without_confirmation_and_never_twice() {
         total_sends > 500,
         "the generator reaches the send path ({total_sends} sends)"
     );
+}
+
+/// C1: once the arm has expired, nothing previewed or confirmed before can be sent,
+/// and a fresh arm is needed (random idle gaps around the 60 s limit).
+#[test]
+fn c1_expired_arm_never_sends() {
+    check("command_expired_arm", 300, |r| {
+        let mut w = World::new();
+        let audit = MemoryAudit::new();
+        let mut svc = service(&w, &audit);
+        svc.arm(target("sim-vfd.json", &sim_link("sim"), 2), op(Role::Operator))
+            .unwrap();
+        let gap1 = r.range_u64(0, 70_000);
+        w.clock.advance(gap1);
+        let previewed = svc.preview(&mut w.link(), set("freq_setpoint", 12.0));
+        assert_eq!(previewed.is_ok(), gap1 < 60_000, "preview after {gap1} ms idle");
+        let Ok(p) = previewed else {
+            assert_eq!(svc.armed_device(), None);
+            assert!(w.write_frames().is_empty());
+            return;
+        };
+        let gap2 = r.range_u64(0, 70_000);
+        w.clock.advance(gap2);
+        let confirmed = svc.confirm(p.id);
+        assert_eq!(confirmed.is_ok(), gap2 < 60_000);
+        let gap3 = r.range_u64(0, 70_000);
+        w.clock.advance(gap3);
+        let res = svc.execute(&mut w.link());
+        let should_send = gap2 < 60_000 && gap3 < 60_000;
+        assert_eq!(res.is_ok(), should_send, "gaps {gap1}/{gap2}/{gap3}");
+        assert_eq!(w.write_frames().len(), usize::from(should_send));
+        // Never twice for one confirmation.
+        assert!(svc.execute(&mut w.link()).is_err());
+        assert_eq!(w.write_frames().len(), usize::from(should_send));
+    });
+}
+
+/// C2: for every writable register of the simulated profiles, a random value is
+/// accepted exactly when it lies inside the profile bounds, and what is sent decodes inside them.
+#[test]
+fn c2_bounds_always_enforced() {
+    check("command_bounds", 400, |r| {
+        let mut w = World::new();
+        let audit = MemoryAudit::new();
+        let mut svc = service(&w, &audit);
+        let (file, unit) = *r
+            .pick(&[("sim-vfd.json", 2u8), ("sim-temp-controller.json", 3u8)])
+            .unwrap();
+        let t = target(file, &sim_link("sim"), unit);
+        let profile = t.profile.clone();
+        svc.arm(t, op(Role::Commissioner)).unwrap();
+        let regs: Vec<_> = profile
+            .registers
+            .iter()
+            .filter(|reg| reg.write.is_some() && !reg.id.starts_with("comm_"))
+            .collect();
+        let reg = *r.pick(&regs).unwrap();
+        let wspec = reg.write.clone().unwrap();
+        let v = match r.below(3) {
+            0 => r.range_u64(0, 2000) as f64 / 10.0 - 20.0,
+            1 => r.range_u64(0, 300) as f64,
+            _ => wspec
+                .allowed_values
+                .as_ref()
+                .and_then(|a| r.pick(a).copied())
+                .unwrap_or(1.0),
+        };
+        let inside = if let Some(a) = &wspec.allowed_values {
+            a.contains(&v)
+        } else {
+            let (min, max) = (wspec.min.unwrap(), wspec.max.unwrap());
+            let step_ok = wspec.step.is_none_or(|s| {
+                let k = (v - min) / s;
+                (k - k.round()).abs() <= 1e-6
+            });
+            let range_ok = reg.valid_range.is_none_or(|[lo, hi]| v >= lo && v <= hi);
+            v >= min && v <= max && step_ok && range_ok
+        };
+        let res = svc.preview(&mut w.link(), set(&reg.id, v));
+        assert_eq!(res.is_ok(), inside, "{}={v}: {res:?}", reg.id);
+        if let Ok(p) = res {
+            svc.confirm(p.id).unwrap();
+            svc.execute(&mut w.link()).unwrap();
+            let frames = w.write_frames();
+            let (_, pdu) = rtu::decode_adu(frames.last().unwrap()).unwrap();
+            let WriteRequest::SingleRegister { value, .. } = WriteRequest::decode(pdu).unwrap() else {
+                panic!("single register expected");
+            };
+            let eng = f64::from(if reg.type_name == buslink_core::codec::TypeName::I16 {
+                value as i16 as i32
+            } else {
+                i32::from(value)
+            }) * reg.scale.unwrap_or(1.0);
+            assert!((eng - v).abs() < 1e-6, "sent {eng}, asked {v}");
+        } else {
+            assert!(w.write_frames().is_empty());
+        }
+    });
+}
+
+/// C3: comm-config requests follow the wizard rules.
+#[test]
+fn c3_comm_config_rules() {
+    let mut w = World::new();
+    let audit = MemoryAudit::new();
+    let mut svc = service(&w, &audit);
+    let t = target("sim-vfd.json", &sim_link("sim"), 2);
+    let cc = |setting, value| CommandRequest::CommConfig { setting, value };
+    svc.arm(t.clone(), op(Role::Operator)).unwrap();
+    assert!(matches!(
+        svc.preview(&mut w.link(), cc(CommSettingKind::UnitId, 5)),
+        Err(CommandError::Role {
+            need: "commissioner",
+            ..
+        })
+    ));
+    svc.arm(t.clone(), op(Role::Commissioner)).unwrap();
+    // Outside the wizard path the comm registers are refused, even for a commissioner.
+    assert!(matches!(
+        svc.preview(&mut w.link(), set("comm_unit_id", 5.0)),
+        Err(CommandError::ControlNotAllowed(_))
+    ));
+    assert!(matches!(
+        svc.preview(&mut w.link(), cc(CommSettingKind::UnitId, 0)),
+        Err(CommandError::BroadcastRejected)
+    ));
+    assert!(matches!(
+        svc.preview(&mut w.link(), cc(CommSettingKind::UnitId, 248)),
+        Err(CommandError::OutOfBounds(_))
+    ));
+    assert!(matches!(
+        svc.preview(&mut w.link(), cc(CommSettingKind::Baud, 115_200)),
+        Err(CommandError::OutOfBounds(_))
+    ));
+    assert!(w.write_frames().is_empty());
+    // Baud 19200 is code 2; read-back is deferred to the reconnect.
+    let p = svc.preview(&mut w.link(), cc(CommSettingKind::Baud, 19_200)).unwrap();
+    assert_eq!(p.raw_registers, vec![2]);
+    assert_eq!(p.address, 11);
+    let change = p.comm_change.clone().unwrap();
+    assert_eq!(
+        (change.setting, change.value, change.apply),
+        (CommSettingKind::Baud, 19_200, Apply::Immediate)
+    );
+    svc.confirm(p.id).unwrap();
+    let o = svc.execute(&mut w.link()).unwrap();
+    assert_eq!((o.ack, o.readback), (Ack::Acknowledged, Readback::Unknown));
+    assert!(o.readback_error.unwrap().contains("after reconnect"));
+    assert_eq!(w.write_frames().len(), 1);
+    // A profile without comm_config: the soil sensor documents none.
+    let soil = target("bgt-smps-8in1.json", &sim_link("sim"), 2);
+    if svc.arm(soil, op(Role::Commissioner)).is_ok() {
+        assert!(svc.preview(&mut w.link(), cc(CommSettingKind::UnitId, 5)).is_err());
+    }
+    assert_eq!(w.write_frames().len(), 1);
 }

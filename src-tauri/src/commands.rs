@@ -1,6 +1,6 @@
 //! IPC commands (app-shell-desktop design §9). Monitoring only: no command here
-//! encodes or submits a write; control arrives with the command service (E5).
-//! No command accepts a file path, a raw frame or a write request.
+//! encodes or submits a write; control requests live in `control.rs` and go to
+//! the command service. No command accepts a file path or a raw frame.
 
 use crate::serial::{self, PortView};
 use crate::state::{AppState, platform};

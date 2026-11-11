@@ -100,15 +100,26 @@ impl Training {
         }
     }
 
-    /// In-memory RTU transport with USB-like random fragmentation.
+    /// In-memory RTU transport at 9600 baud with USB-like random fragmentation.
     pub fn transport(&self) -> Box<dyn Transport> {
-        Box::new(SimTransport::rtu(
+        self.transport_at(9600)
+    }
+
+    /// Transport for a link: a simulator link runs at its serial baud, so a
+    /// device commissioned to another baud stops answering (as on a real bus).
+    pub fn transport_for(&self, link: &LinkConfig) -> Box<dyn Transport> {
+        self.transport_at(link.serial().map_or(9600, |s| s.baud))
+    }
+
+    fn transport_at(&self, baud: u32) -> Box<dyn Transport> {
+        Box::new(SimTransport::rtu_at(
             self.world(),
             Arc::clone(&self.clock),
             Chunking::Random {
                 max: 8,
                 seed: self.seed ^ 0x7EA1,
             },
+            baud,
         ))
     }
 

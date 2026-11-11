@@ -1,6 +1,7 @@
 //! The simulated bus: devices by unit ID, a fixed-step process clock, faults
 //! and a seed. Same seed + same requests at the same times → identical bytes.
 
+use crate::devices::comm::{CommChange, DEFAULT_BAUD};
 use crate::devices::{self, STEP_MS, SimModel};
 use crate::fault::{FaultError, FaultId, FaultRule, FaultTable};
 use crate::image::RegisterImage;
@@ -34,6 +35,8 @@ struct SimDevice {
     model: Box<dyn SimModel>,
     rng: SplitMix64,
     requests: u64,
+    /// Serial line speed the device listens at (RTU links that carry a baud only).
+    baud: u32,
 }
 
 /// Result of one request.
@@ -100,7 +103,7 @@ impl SimWorld {
         self.seed
     }
 
-    pub fn add_device(&mut self, unit: u8, model: Box<dyn SimModel>) -> Result<(), WorldError> {
+    pub fn add_device(&mut self, unit: u8, mut model: Box<dyn SimModel>) -> Result<(), WorldError> {
         if !(1..=247).contains(&unit) {
             return Err(WorldError::UnitRange(unit));
         }
@@ -108,15 +111,59 @@ impl SimWorld {
             return Err(WorldError::UnitTaken(unit));
         }
         let rng = SplitMix64::new(self.seed ^ u64::from(unit).wrapping_mul(GOLDEN_GAMMA));
+        if let Some(c) = model.comm() {
+            c.unit = unit;
+        }
         self.devices.insert(
             unit,
             SimDevice {
                 model,
                 rng,
                 requests: 0,
+                baud: DEFAULT_BAUD,
             },
         );
         Ok(())
+    }
+
+    /// Baud the device at `unit` listens at.
+    pub fn baud(&self, unit: u8) -> Option<u32> {
+        self.devices.get(&unit).map(|d| d.baud)
+    }
+
+    /// Apply unit-ID / baud changes a write left behind (after its reply was built).
+    /// A new unit ID that is already taken is refused: the device keeps its old ID.
+    fn apply_comm_changes(&mut self, unit: u8) {
+        let changes = match self.devices.get_mut(&unit).and_then(|d| d.model.comm()) {
+            Some(c) => c.take_pending(),
+            None => return,
+        };
+        let mut unit = unit;
+        for ch in changes {
+            match ch {
+                CommChange::Baud(b) => {
+                    if let Some(d) = self.devices.get_mut(&unit) {
+                        d.baud = b;
+                        if let Some(c) = d.model.comm() {
+                            c.baud = b;
+                        }
+                    }
+                }
+                CommChange::Unit(new) => {
+                    if new == unit || !(1..=247).contains(&new) || self.devices.contains_key(&new) {
+                        continue;
+                    }
+                    if let Some(mut d) = self.devices.remove(&unit) {
+                        if let Some(c) = d.model.comm() {
+                            c.unit = new;
+                        }
+                        self.devices.insert(new, d);
+                        self.faults.clear_unit(unit);
+                        unit = new;
+                    }
+                }
+            }
+        }
     }
 
     pub fn add_model(&mut self, unit: u8, model_id: &str) -> Result<(), WorldError> {
@@ -187,6 +234,10 @@ impl SimWorld {
             if pdu.first().is_some_and(|fc| matches!(fc, 0x05 | 0x06 | 0x0F | 0x10)) {
                 for d in self.devices.values_mut() {
                     let _ = server::handle(d.model.as_mut(), pdu, false);
+                    // A broadcast never moves a device to another address or baud.
+                    if let Some(c) = d.model.comm() {
+                        c.take_pending();
+                    }
                 }
             }
             return Reply::silent();
@@ -204,6 +255,7 @@ impl SimWorld {
             Some(code) => exception_response(pdu.first().copied().unwrap_or(0), ExceptionCode(code)).to_vec(),
             None => server::handle(d.model.as_mut(), pdu, effect.wrong_order),
         };
+        self.apply_comm_changes(unit);
         Reply {
             pdu: Some(pdu),
             delay_ms: TURNAROUND_MS + effect.delay_ms,
@@ -214,6 +266,12 @@ impl SimWorld {
     /// Handle one RTU ADU. Bad CRC or unknown unit → silence.
     /// Returns the reply ADU and its delay.
     pub fn handle_rtu(&mut self, adu: &[u8], now_ms: u64) -> Option<(Vec<u8>, u64)> {
+        self.handle_rtu_at(adu, now_ms, None)
+    }
+
+    /// Like [`handle_rtu`](Self::handle_rtu) on a line running at `baud`: a device
+    /// listening at another baud does not understand the frame and stays silent.
+    pub fn handle_rtu_at(&mut self, adu: &[u8], now_ms: u64, baud: Option<u32>) -> Option<(Vec<u8>, u64)> {
         let (unit, pdu) = match rtu::decode_adu(adu) {
             Ok(x) => x,
             Err(_) => {
@@ -221,6 +279,12 @@ impl SimWorld {
                 return None;
             }
         };
+        if let Some(b) = baud
+            && self.devices.get(&unit).is_some_and(|d| d.baud != b)
+        {
+            self.advance_to(now_ms);
+            return None;
+        }
         let reply = self.handle_pdu(unit, pdu, now_ms);
         let pdu = reply.pdu?;
         let mut out = rtu::encode_adu(unit, &pdu).ok()?;

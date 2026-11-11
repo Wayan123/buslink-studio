@@ -49,6 +49,21 @@ const families = {
   "train.fault.": ["timeout", "crc_error", "exception02", "stale", "wrong_order"],
   "train.fault_name.": ["timeout", "crc_error", "exception02", "stale", "wrong_order"],
   "train.unit.": ["1", "2", "3", "4", "other"],
+  "ctl.ack.": ["acknowledged", "exception", "timeout", "bad_echo", "crc_error", "invalid", "link_lost", "not_sent", "none"],
+  "ctl.disarm.": ["operator", "disconnect", "reconnect", "profile_change", "app_background", "link_lost", "expired"],
+  "ctl.fb.": ["pending", "feedback_unavailable", "reached", "not_reached", "none"],
+  "ctl.readback.": ["verified", "mismatch", "unknown"],
+  "ctl.risk.": ["low", "medium", "high"],
+  "ctl.role.": ["operator", "commissioner"],
+  "ctl.err.": ["not_number", "range", "step", "allowed", "not_writable", "user"],
+  "wiz.result.": ["passed", "failed", "needs_verification", "reverted"],
+  "wiz.setting.": ["unit_id", "baud"],
+  "wiz.state.": ["done", "current", "todo"],
+  "wiz.step.": ["journal", "arm", "confirm", "send", "reconnect", "verify"],
+  "wiz.": ["arm", "preview", "cancel", "power_cycled", "reconnect", "verify", "close", "revert"],
+  "audit.col.": ["time", "event", "user", "device", "register", "values", "frames", "result", "note"],
+  "audit.event.": ["arm", "disarm", "arm_expired", "preview", "confirm", "cancel", "sent", "result", "rejected", "journal", "verify", "feedback", "none"],
+  "audit.export.": ["csv", "xlsx"],
 };
 for (const [prefix, items] of Object.entries(families)) {
   for (const i of items) if (!(`${prefix}${i}` in en)) problems.push(`missing dynamic key "${prefix}${i}"`);

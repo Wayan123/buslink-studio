@@ -1,11 +1,12 @@
 //! Simulated temperature controller. Holding registers (simulator design, see
 //! profiles/sim-temp-controller.json): 0 PV i16 ×0.1 °C, 1 SP i16 ×0.1 °C (rw 0–1200),
 //! 2 output ×0.1 %, 3 mode (rw 0 auto, 1 manual), 4 manual output ×0.1 % (rw 0–1000),
-//! 5 heater enable (rw 0/1).
+//! 5 heater enable (rw 0/1), 10 unit ID and 11 baud code (rw, see `comm.rs`).
 //!
 //! Plant: τ·dPV/dt = ambient + gain·out/100 − PV (τ 60 s, gain 150 °C, ambient 25 °C).
 //! Auto mode: PI with anti-windup.
 
+use super::comm::CommRegs;
 use super::{SimModel, register_values};
 use crate::image::{ImageBuilder, RegisterImage, quantise};
 use buslink_core::command::wire::WriteRequest;
@@ -26,6 +27,7 @@ pub struct TempController {
     pub manual: bool,
     pub manual_output: f64,
     pub heater_enabled: bool,
+    pub comm: CommRegs,
     integral: f64,
 }
 
@@ -38,6 +40,7 @@ impl TempController {
             manual: false,
             manual_output: 0.0,
             heater_enabled: false,
+            comm: CommRegs::default(),
             integral: 0.0,
         }
     }
@@ -83,6 +86,7 @@ impl SimModel for TempController {
             .u16(h, 3, u16::from(self.manual), true)
             .u16(h, 4, quantise(self.manual_output, 0.1, 0.0, 1000.0) as u16, true)
             .u16(h, 5, u16::from(self.heater_enabled), true);
+        self.comm.image(&mut b);
         b.build()
     }
 
@@ -97,6 +101,7 @@ impl SimModel for TempController {
                 1 => (0..=1200).contains(&(*v as i16)),
                 3 | 5 => *v <= 1,
                 4 => *v <= 1000,
+                a if CommRegs::handles(*a) => CommRegs::check(*a, *v).is_ok(),
                 _ => false,
             };
             if !ok {
@@ -108,10 +113,15 @@ impl SimModel for TempController {
                 1 => self.sp = f64::from(v as i16) * 0.1,
                 3 => self.manual = v == 1,
                 4 => self.manual_output = f64::from(v) * 0.1,
-                _ => self.heater_enabled = v == 1,
+                5 => self.heater_enabled = v == 1,
+                a => self.comm.apply(a, v),
             }
         }
         Ok(())
+    }
+
+    fn comm(&mut self) -> Option<&mut CommRegs> {
+        Some(&mut self.comm)
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {

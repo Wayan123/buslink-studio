@@ -5,10 +5,12 @@
 //! the simulator.
 //!
 //! There is no write path here: monitoring only (safety rules 1–2). Control
-//! goes through `crate::command` (epic E5).
+//! goes through `crate::command`; `access.rs` only hands it the link worker's
+//! queue, the audit sink and the settings changes a commissioning run needs.
 //!
 //! Lock order: `links` → `live` → `alarms` → `log` → `historian`.
 
+pub mod access;
 pub mod frames;
 pub mod live;
 
@@ -226,6 +228,9 @@ struct LinkEntry {
     state: LinkState,
     error: Option<String>,
     counters: Vec<(String, DeviceCounters)>,
+    /// Changes on connect, reconnect, disconnect, link down and settings change.
+    /// Arming remembers it, so any of these drops control (safety rule 3).
+    generation: u64,
 }
 
 struct LogState {
@@ -257,6 +262,7 @@ struct Shared {
     historian_error: Mutex<Option<String>>,
     registered: Mutex<HashSet<String>>,
     links_rev: AtomicU64,
+    generations: AtomicU64,
     cursor: Mutex<FrameCursor>,
     stop: AtomicBool,
 }
@@ -411,6 +417,10 @@ impl Shared {
         self.links_rev.fetch_add(1, Ordering::SeqCst);
     }
 
+    fn next_generation(&self) -> u64 {
+        self.generations.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
     fn spawn_worker(&self, e: &mut LinkEntry) -> Result<(), SessionError> {
         let transport = e
             .transport
@@ -496,6 +506,7 @@ impl Shared {
                             .unwrap_or_else(|| "transport lost".into());
                         e.state = LinkState::Down;
                         e.error = Some(why.clone());
+                        e.generation = self.next_generation();
                         if let Some(t) = e.transport.take() {
                             lock(&t).close();
                         }
@@ -599,6 +610,7 @@ impl Session {
             historian_error: Mutex::new(historian_error),
             registered: Mutex::new(HashSet::new()),
             links_rev: AtomicU64::new(1),
+            generations: AtomicU64::new(0),
             cursor: Mutex::new(FrameCursor {
                 alarm_rev: u64::MAX,
                 links_rev: 0,
@@ -685,6 +697,7 @@ impl Session {
                 state: LinkState::Connected,
                 error: None,
                 counters: Vec::new(),
+                generation: self.shared.next_generation(),
             },
         );
         drop(links);
@@ -720,6 +733,7 @@ impl Session {
         e.transport = Some(Arc::new(Mutex::new(t)));
         e.state = LinkState::Connected;
         e.error = None;
+        e.generation = self.shared.next_generation();
         drop(links);
         self.shared.bump_links();
         self.shared
@@ -740,6 +754,7 @@ impl Session {
                 lock(&t).close();
             }
             e.state = LinkState::Disconnected;
+            e.generation = self.shared.next_generation();
         }
         self.shared.bump_links();
         self.publish_disconnected(link_id, "disconnected by the user");

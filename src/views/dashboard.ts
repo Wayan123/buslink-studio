@@ -143,6 +143,13 @@ export function dashboardView(params: { device?: string } = {}): View {
         { class: "head-links", "aria-label": t("dash.device_links") },
         h("a", { href: `#/trends/${encodeURIComponent(device.id)}`, "data-fk": "trends" }, t("nav.trends")),
         h("a", { href: `#/inspector/${encodeURIComponent(device.id)}`, "data-fk": "inspector" }, t("nav.inspector")),
+        // Control panel only for simulated devices on a simulator link (safety rule 8).
+        link.simulated && profile?.simulated_only
+          ? h("a", { href: `#/control/${encodeURIComponent(device.id)}`, "data-fk": "control", "data-testid": `control-${device.id}` }, t("nav.control"))
+          : null,
+        profile?.capabilities?.comm_config && profile.capabilities.comm_config !== "unsupported"
+          ? h("a", { href: `#/commission/${encodeURIComponent(device.id)}`, "data-fk": "commission" }, t("nav.commission"))
+          : null,
       ),
     );
     });

@@ -447,6 +447,38 @@ impl Historian {
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
+    /// Stored sample counts per device and quality label (`GOOD`, `TIMEOUT`, ...), for the session report.
+    pub fn quality_counts(&self, session: &str) -> Result<Vec<(String, String, u64)>, HistorianError> {
+        let mut st = self.conn.prepare(
+            "SELECT d.device_key, s.quality, s.exception, COUNT(*)
+             FROM samples s JOIN tags t ON t.id = s.tag JOIN devices d ON d.id = t.device
+             WHERE d.session = ?1 GROUP BY d.device_key, s.quality, s.exception ORDER BY d.device_key, s.quality",
+        )?;
+        let rows = st.query_map(params![session], |r| {
+            let q: u8 = r.get(1)?;
+            let exc: Option<u8> = r.get(2)?;
+            let n: i64 = r.get(3)?;
+            Ok((
+                r.get::<_, String>(0)?,
+                Quality::from_code(q, exc)
+                    .unwrap_or(Quality::DecodeError)
+                    .as_str()
+                    .to_owned(),
+                u64::try_from(n).unwrap_or(0),
+            ))
+        })?;
+        // EXCEPTION rows differ by code; merge them under one label.
+        let mut out: Vec<(String, String, u64)> = Vec::new();
+        for row in rows {
+            let (d, q, n) = row?;
+            match out.iter_mut().find(|(od, oq, _)| *od == d && *oq == q) {
+                Some(e) => e.2 += n,
+                None => out.push((d, q, n)),
+            }
+        }
+        Ok(out)
+    }
+
     pub fn events(&self, session: &str) -> Result<Vec<EventRow>, HistorianError> {
         let mut st = self.conn.prepare(
             "SELECT session, ts_ms, kind, device, tag, severity, text FROM events WHERE session = ?1 OR session IS NULL ORDER BY ts_ms, id",

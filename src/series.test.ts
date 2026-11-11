@@ -1,7 +1,7 @@
 // U1/U2: store buffers → uPlot series. Run with `node --test` (type stripping).
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { align, bufferToSeries, NO_DATA } from "./series.ts";
+import { align, bufferToSeries, firstPointMs, liveBounds, MIN_LIVE_SPAN_MS, NO_DATA } from "./series.ts";
 import type { TrendBuffer } from "./store.ts";
 import type { QualityCode } from "./types.ts";
 
@@ -81,4 +81,22 @@ test("align keeps own nulls and uses undefined only for alignment", () => {
   assert.deepEqual(x, [1, 2, 3, 4]);
   assert.deepEqual(ys[0], [1, null, 3, undefined]);
   assert.deepEqual(ys[1], [undefined, 5, undefined, 6]);
+});
+
+test("live window auto-fits from the session's first point, capped at the chosen window", () => {
+  const now = 1_000_000;
+  const five = 5 * 60_000;
+  // Session younger than the window: the axis starts at the first point.
+  assert.deepEqual(liveBounds(now, five, now - 90_000), { from: now - 90_000, to: now });
+  // Session older than the window: capped at the window.
+  assert.deepEqual(liveBounds(now, five, now - 20 * 60_000), { from: now - five, to: now });
+  // Explicit windows keep working: the same history fits 15 min but is capped at 5 min.
+  const first = now - 10 * 60_000;
+  assert.equal(liveBounds(now, 15 * 60_000, first).from, first);
+  assert.equal(liveBounds(now, five, first).from, now - five);
+  // A brand-new session still shows at least MIN_LIVE_SPAN_MS; no data → the full window.
+  assert.deepEqual(liveBounds(now, five, now - 2_000), { from: now - MIN_LIVE_SPAN_MS, to: now });
+  assert.deepEqual(liveBounds(now, five, undefined), { from: now - five, to: now });
+  assert.equal(firstPointMs([undefined, buf([[500, 1, "GOOD"]]), buf([[200, null, "TIMEOUT"]])]), 200);
+  assert.equal(firstPointMs([buf([])]), undefined);
 });

@@ -16,6 +16,12 @@ pub enum AuditEvent {
     Sent,
     Result,
     Rejected,
+    /// Commissioning journal: old settings, recorded before arming.
+    Journal,
+    /// Commissioning verification at the new settings.
+    Verify,
+    /// Process feedback resolved (reached / not reached / unavailable).
+    Feedback,
 }
 
 impl AuditEvent {
@@ -30,6 +36,9 @@ impl AuditEvent {
             AuditEvent::Sent => "sent",
             AuditEvent::Result => "result",
             AuditEvent::Rejected => "rejected",
+            AuditEvent::Journal => "journal",
+            AuditEvent::Verify => "verify",
+            AuditEvent::Feedback => "feedback",
         }
     }
 }

@@ -1,6 +1,7 @@
 //! Simulated device models. Every register map here is a simulator design
 //! choice except the BGT-SMPS soil sensor, which follows its manual.
 
+pub mod comm;
 pub mod energy;
 pub mod soil;
 pub mod temp;
@@ -26,6 +27,10 @@ pub trait SimModel: Send + Any {
     /// Apply a write after the server checked that every address exists and is
     /// writable. Validate all values before changing anything.
     fn apply(&mut self, write: &WriteRequest) -> Result<(), ExceptionCode>;
+    /// Unit-ID / baud registers, for models that have them.
+    fn comm(&mut self) -> Option<&mut comm::CommRegs> {
+        None
+    }
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 

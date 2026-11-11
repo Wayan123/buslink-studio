@@ -7,19 +7,24 @@
 //! there is no retry path anywhere in this module.
 
 pub mod audit;
+pub mod commission;
+pub mod control;
+pub mod feedback;
 pub mod wire;
 
 use crate::clock::Clock;
 use crate::codec::{self, DataType};
 use crate::device::{DeviceInstance, LinkConfig};
-use crate::profile::{CapabilityLevel, CommandKind, Profile, Register, Text, WriteRole};
+use crate::profile::{
+    Apply, CapabilityLevel, CommConfig, CommSetting, CommandKind, Profile, Register, Text, WriteRole,
+};
 use crate::protocol::pdu::{ExpectedReply, ReadData, ReadRequest, Table, decode_read_response};
 use crate::protocol::{rtu, tcp};
 use crate::time::hex_spaced;
 use crate::transport::Transport;
 use crate::transport::exchange::{ExchangeError, ExchangeRecord, Exchanger, Outgoing};
 use audit::{AuditError, AuditEvent, AuditRecord, AuditSink};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use thiserror::Error;
 use wire::WriteRequest;
@@ -88,7 +93,7 @@ impl CommandLink for DirectLink<'_> {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Role {
     Viewer,
@@ -133,6 +138,8 @@ pub enum CommandRequest {
     SetRegister { register: String, value: f64 },
     /// A profile command (simulated devices only). Setpoint commands need `value`.
     Named { command: String, value: Option<f64> },
+    /// Commissioning: new unit ID or baud through the profile's `comm_config` register.
+    CommConfig { setting: CommSettingKind, value: u32 },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -144,6 +151,8 @@ pub enum DisarmReason {
     ProfileChange,
     AppBackground,
     LinkLost,
+    /// Idle time ran out (recorded as `arm_expired`, shown in the status).
+    Expired,
 }
 
 impl DisarmReason {
@@ -155,6 +164,7 @@ impl DisarmReason {
             DisarmReason::ProfileChange => "profile_change",
             DisarmReason::AppBackground => "app_background",
             DisarmReason::LinkLost => "link_lost",
+            DisarmReason::Expired => "expired",
         }
     }
 }
@@ -191,6 +201,8 @@ pub struct Preview {
     pub frame_hex: String,
     pub readback_register: String,
     pub risk: String,
+    /// Set for commissioning requests.
+    pub comm_change: Option<CommChangePreview>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -317,6 +329,97 @@ enum Compare {
     SameRaw(Vec<u16>),
     Expected(f64, f64),
     Report,
+    /// Comm-config change: read back after reconnecting at the new settings.
+    Deferred,
+}
+
+/// Which communication setting a commissioning request changes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CommSettingKind {
+    UnitId,
+    Baud,
+}
+
+impl CommSettingKind {
+    pub fn of(self, c: &CommConfig) -> Option<&CommSetting> {
+        match self {
+            CommSettingKind::UnitId => c.unit_id.as_ref(),
+            CommSettingKind::Baud => c.baud.as_ref(),
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            CommSettingKind::UnitId => "unit_id",
+            CommSettingKind::Baud => "baud",
+        }
+    }
+}
+
+/// The comm-config part of a preview: the setting as the operator thinks of it.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct CommChangePreview {
+    pub setting: CommSettingKind,
+    /// New unit ID or new baud rate (not the raw code).
+    pub value: u32,
+    pub apply: Apply,
+}
+
+/// The comm-config setting whose register is `register`, if any.
+pub fn comm_register(profile: &Profile, register: &str) -> Option<CommSettingKind> {
+    let c = profile.comm_config.as_ref()?;
+    [CommSettingKind::UnitId, CommSettingKind::Baud]
+        .into_iter()
+        .find(|k| k.of(c).is_some_and(|s| s.register == register))
+}
+
+/// Register and raw value for a comm-config request (design §3).
+fn comm_plan(
+    profile: &Profile,
+    role: Role,
+    setting: CommSettingKind,
+    value: u32,
+) -> Result<(String, f64), CommandError> {
+    let spec = profile
+        .comm_config
+        .as_ref()
+        .and_then(|c| setting.of(c))
+        .ok_or(CommandError::ControlNotAllowed(
+            "the profile does not document this communication setting",
+        ))?;
+    if profile.capability(|c| c.comm_config) == CapabilityLevel::Unsupported {
+        return Err(CommandError::ControlNotAllowed(
+            "the profile does not declare comm_config support",
+        ));
+    }
+    if role < Role::Commissioner {
+        return Err(CommandError::Role {
+            have: role.as_str(),
+            need: "commissioner",
+        });
+    }
+    let raw = match setting {
+        CommSettingKind::UnitId => {
+            if value == 0 {
+                return Err(CommandError::BroadcastRejected);
+            }
+            if value > 247 {
+                return Err(CommandError::OutOfBounds(format!("unit ID {value} is outside 1..247")));
+            }
+            f64::from(value)
+        }
+        CommSettingKind::Baud => {
+            let code = spec
+                .codes
+                .as_ref()
+                .and_then(|codes| codes.iter().find(|(_, b)| **b == value))
+                .and_then(|(code, _)| code.parse::<u32>().ok())
+                .ok_or_else(|| CommandError::OutOfBounds(format!("{value} baud has no code in the profile")))?;
+            f64::from(code)
+        }
+    };
+    Ok((spec.register.clone(), raw))
 }
 
 #[derive(Debug)]
@@ -457,6 +560,52 @@ impl CommandService {
 
     pub fn armed_device(&self) -> Option<&str> {
         self.armed.as_ref().map(|a| a.target.device.id.as_str())
+    }
+
+    pub fn arm_timeout_ms(&self) -> u64 {
+        self.config.arm_timeout_ms
+    }
+
+    /// Drop an arm whose idle time ran out (records `arm_expired`). True if it expired now.
+    pub fn expire_if_due(&mut self) -> bool {
+        self.armed.is_some() && self.ensure_armed().is_err()
+    }
+
+    pub fn armed_operator(&self) -> Option<&Operator> {
+        self.armed.as_ref().map(|a| &a.operator)
+    }
+
+    /// The current preview, if one waits for confirmation (or is confirmed and not yet sent).
+    pub fn pending_preview(&self) -> Option<&Preview> {
+        match &self.inner {
+            Inner::Previewed(p) | Inner::Confirmed(p) => Some(&p.preview),
+            _ => None,
+        }
+    }
+
+    /// An audit row that is not part of a command transition (wizard journal and
+    /// verification, process feedback). Works armed or not; never sends anything.
+    pub fn note(
+        &mut self,
+        event: AuditEvent,
+        target: &CommandTarget,
+        operator: &Operator,
+        fill: impl FnOnce(&mut AuditRecord),
+    ) -> Result<(), AuditError> {
+        let mut r = AuditRecord {
+            ts_ms: self.clock.utc_ms(),
+            session_id: self.session_id.clone(),
+            event: Some(event),
+            user: operator.user.clone(),
+            role: operator.role.as_str().into(),
+            device_id: target.device.id.clone(),
+            profile_id: target.profile.profile_id.clone(),
+            profile_version: target.profile.profile_version.clone(),
+            unit_id: Some(target.device.unit_id),
+            ..AuditRecord::default()
+        };
+        fill(&mut r);
+        self.audit.append(&r)
     }
 
     /// Remaining arming time, for "Armed: control enabled for 52 s".
@@ -648,11 +797,27 @@ impl CommandService {
             ));
         }
         let (reg_id, value, command) = match request {
-            CommandRequest::SetRegister { register, value } => (register.clone(), *value, None),
+            CommandRequest::SetRegister { register, value } => {
+                if comm_register(profile, register).is_some() {
+                    return Err(CommandError::ControlNotAllowed(
+                        "communication settings are changed only through the commissioning wizard",
+                    ));
+                }
+                (register.clone(), *value, None)
+            }
+            CommandRequest::CommConfig { setting, value } => {
+                let (reg, raw) = comm_plan(profile, role, *setting, *value)?;
+                (reg, raw, None)
+            }
             CommandRequest::Named { command, value } => {
                 let c = profile
                     .command(command)
                     .ok_or_else(|| CommandError::UnknownCommand(command.clone()))?;
+                if comm_register(profile, &c.register).is_some() {
+                    return Err(CommandError::ControlNotAllowed(
+                        "communication settings are changed only through the commissioning wizard",
+                    ));
+                }
                 if !profile.simulated_only || !simulator {
                     return Err(CommandError::ControlNotAllowed(
                         "control commands exist only for simulated devices in this release",
@@ -773,7 +938,9 @@ impl CommandService {
         let rb_type = rb_reg.data_type().ok_or(CommandError::UnsupportedType("unknown"))?;
         let rb_req = ReadRequest::for_table(rb_reg.table, rb_reg.address, rb_reg.width())
             .map_err(|e| CommandError::Encode(e.to_string()))?;
-        let compare = if rb_reg.id == reg.id {
+        let compare = if matches!(request, CommandRequest::CommConfig { .. }) {
+            Compare::Deferred
+        } else if rb_reg.id == reg.id {
             Compare::SameRaw(regs.clone())
         } else if let Some(expected) = command.as_ref().and_then(|c| c.expected) {
             Compare::Expected(expected, (rb_reg.scale.unwrap_or(1.0).abs() / 2.0).max(1e-9))
@@ -810,6 +977,18 @@ impl CommandService {
             frame_hex: hex_spaced(&frame_bytes),
             readback_register: rb_reg.id.clone(),
             risk: format!("{:?}", wspec.risk).to_lowercase(),
+            comm_change: match request {
+                CommandRequest::CommConfig { setting, value } => Some(CommChangePreview {
+                    setting: *setting,
+                    value: *value,
+                    apply: profile
+                        .comm_config
+                        .as_ref()
+                        .and_then(|c| setting.of(c))
+                        .map_or(Apply::Unknown, |s| s.apply),
+                }),
+                _ => None,
+            },
         };
         Ok(Plan {
             preview,
@@ -919,6 +1098,14 @@ impl CommandService {
         self.inner = Inner::ReadBack;
         let (readback, readback_value, readback_raw, readback_error) = if matches!(ack, Ack::LinkLost | Ack::NotSent) {
             (Readback::Unknown, None, None, Some("link lost".to_owned()))
+        } else if compare == Compare::Deferred {
+            // The device now answers at its new settings; the wizard verifies after reconnecting.
+            (
+                Readback::Unknown,
+                None,
+                None,
+                Some("verified after reconnect at the new settings".to_owned()),
+            )
         } else {
             match link.read(unit, readback_request) {
                 Err(e) => (Readback::Unknown, None, None, Some(e.to_string())),
@@ -941,6 +1128,7 @@ impl CommandService {
                             None => Readback::Unknown,
                         },
                         Compare::Report => Readback::Unknown,
+                        Compare::Deferred => Readback::Unknown,
                     };
                     (verdict, value, Some(words), decoded.err().map(|e| e.to_string()))
                 }

@@ -2,6 +2,8 @@
 
 use crate::serial;
 use buslink_core::clock::{Clock, SystemClock};
+use buslink_core::command::CommandConfig;
+use buslink_core::command::control::Control;
 use buslink_core::device::{LinkConfig, LinkKind};
 use buslink_core::profile;
 use buslink_core::session::{Session, SessionConfig, TransportFactory};
@@ -40,6 +42,8 @@ const BUNDLED: [(&str, &str); 5] = [
 
 pub struct AppState {
     pub session: Arc<Session>,
+    /// The one command service of the app (the only write path, safety rule 2).
+    pub control: Arc<Control>,
     pub training: Arc<Mutex<Option<Arc<Training>>>>,
     pub clock: Arc<dyn Clock>,
     pub db_path: Option<PathBuf>,
@@ -58,7 +62,7 @@ fn factory(training: Arc<Mutex<Option<Arc<Training>>>>) -> TransportFactory {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .as_ref()
-                .map(|t| t.transport())
+                .map(|t| t.transport_for(cfg))
                 .ok_or_else(|| TransportError::Io("Training mode is not started".into())),
         }
     })
@@ -102,8 +106,11 @@ impl AppState {
                 Err(e) => profile_errors.push(format!("{name}: {e}")),
             }
         }
+        let session = Arc::new(session);
+        let control = Arc::new(Control::new(Arc::clone(&session), CommandConfig::default()));
         Ok(AppState {
-            session: Arc::new(session),
+            session,
+            control,
             training,
             clock,
             db_path,

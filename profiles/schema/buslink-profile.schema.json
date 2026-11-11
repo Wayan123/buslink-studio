@@ -239,7 +239,20 @@
         "value": { "type": "number" },
         "readback_register": { "$ref": "#/$defs/id" },
         "expected": { "type": "number" },
-        "timeout_ms": { "type": "integer", "minimum": 100, "maximum": 30000 }
+        "timeout_ms": { "type": "integer", "minimum": 100, "maximum": 30000 },
+        "feedback": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["register", "tolerance", "timeout_ms"],
+          "properties": {
+            "register": { "$ref": "#/$defs/id" },
+            "tolerance": { "type": "number", "minimum": 0 },
+            "timeout_ms": { "type": "integer", "minimum": 100, "maximum": 3600000 },
+            "value": { "type": "number" },
+            "bit": { "type": "integer", "minimum": 0, "maximum": 15 }
+          },
+          "dependentSchemas": { "bit": { "required": ["value"], "properties": { "value": { "enum": [0, 1] } } } }
+        }
       },
       "if": { "properties": { "kind": { "const": "setpoint" } }, "required": ["kind"] },
       "then": { "not": { "required": ["value"] } },

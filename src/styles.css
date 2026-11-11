@@ -830,6 +830,147 @@ dl.legend dd {
   list-style: none;
 }
 
+/* ---------- control, commissioning, audit, report (commissioning-control) ---------- */
+.device-line {
+  color: var(--text-muted);
+}
+.arm-box.armed {
+  border: 3px solid var(--info); /* armed = selection/info hue + text; never green */
+}
+.arm-text {
+  font-weight: 700;
+}
+.stop-box {
+  border: 2px solid var(--text);
+}
+.stop-button {
+  font-weight: 700;
+  border-width: 3px;
+  border-color: var(--text);
+  min-height: 3rem;
+}
+.cmd-box .cmd-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem 1rem;
+  margin: 0.6rem 0;
+}
+.cmd-box .cmd-row + .cmd-row {
+  border-top: 1px solid var(--grid);
+  padding-top: 0.6rem;
+}
+dl.result-list,
+dl.confirm-list,
+dl.report-meta {
+  display: grid;
+  grid-template-columns: minmax(8rem, max-content) 1fr;
+  gap: 0.25rem 1rem;
+  margin: 0.4rem 0;
+}
+dl.result-list dd,
+dl.confirm-list dd,
+dl.report-meta dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.state-bad::before {
+  content: "▲ ";
+}
+.state-bad {
+  font-weight: 600;
+}
+.state-unknown {
+  font-style: italic;
+}
+tr.dim td {
+  color: var(--text-muted);
+}
+.confirm-dialog {
+  max-width: min(42rem, 96vw);
+  background: var(--surface);
+  color: var(--text);
+  border: 2px solid var(--text);
+  border-radius: 6px;
+  padding: 1rem 1.25rem;
+}
+.confirm-dialog::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+.dialog-actions {
+  justify-content: space-between; /* cancel and send never sit side by side */
+  gap: 2rem;
+}
+.link-list li {
+  margin: 0.3rem 0;
+}
+.wiz-steps {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+.wiz-step {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-muted);
+}
+.wiz-step.current {
+  color: var(--text);
+  font-weight: 700;
+}
+.wiz-step.done {
+  color: var(--text);
+}
+.step-shape {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+}
+.step-shape polygon,
+.step-shape circle {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+}
+.wiz-step.done .step-shape polygon {
+  fill: currentColor;
+}
+.recovery {
+  border: 2px dashed var(--line);
+}
+.audit-table td,
+.report-table td {
+  vertical-align: top;
+}
+.report h1 {
+  font-size: 1.4rem;
+}
+.report-table {
+  margin-bottom: 0.75rem;
+}
+
+@media print {
+  .app-header,
+  .nav,
+  .notices,
+  .app-footer,
+  .no-print,
+  .status-line {
+    display: none !important;
+  }
+  body,
+  main {
+    background: #fff;
+    color: #000;
+    padding: 0;
+  }
+  .report tr {
+    break-inside: avoid;
+  }
+}
+
 /* ---------- narrow screens (Android, 360 px) ---------- */
 @media (max-width: 720px) {
   .app-header {

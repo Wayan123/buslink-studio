@@ -1,0 +1,133 @@
+{
+  "date": "2026-11-11T23:03:11.542Z",
+  "platform": "Windows (WebView2 in the e2e build)",
+  "journey": "PRD §5 journey 4 (simulated VFD)",
+  "steps": [
+    {
+      "name": "connect to app over CDP",
+      "ok": true,
+      "detail": "http://tauri.localhost/"
+    },
+    {
+      "name": "Training mode: 3 simulated devices GOOD",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "dashboard offers the control panel only for the simulated VFD and temperature controller",
+      "ok": true,
+      "detail": "#/control/sim-vfd-basic-u2, #/control/sim-temp-controller-basic-u3"
+    },
+    {
+      "name": "starts in Monitoring: 'Simulated device' banner, commands disabled",
+      "ok": true,
+      "detail": "{\"banner\":\"Simulated device\",\"disabled\":true,\"stopHidden\":true}"
+    },
+    {
+      "name": "arming without a user name is refused next to the field",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "armed with a countdown",
+      "ok": true,
+      "detail": "Armed: control enabled for 60 s · trainee (Operator)"
+    },
+    {
+      "name": "software stop visible while armed, labelled 'Software stop. Not an emergency stop.'",
+      "ok": true,
+      "detail": "Software stop. Not an emergency stop."
+    },
+    {
+      "name": "countdown runs",
+      "ok": true,
+      "detail": "Armed: control enabled for 60 s · trainee (Operator) → Armed: control enabled for 58 s · trainee (Operator)"
+    },
+    {
+      "name": "run: confirm dialog opens with the safe choice focused",
+      "ok": true,
+      "detail": "{\"label\":\"Run drive\",\"newValue\":\"1\",\"frame\":\"02 06 00 00 00 01 48 39\",\"unit\":\"2\",\"fn\":\"FC06 Write Single Register\",\"raw\":\"0001 (1)\",\"register\":\"Control word · holding_register (40001) · PDU offset 0\",\"focus\":\"confirm-cancel\",\"fields\":[\"Device\",\"Unit ID\",\"Register\",\"Function\",\"Old value\",\"New value\",\"Raw register value\",\"Frame to send (hex)\",\"Read back from\",\"Risk\"]}"
+    },
+    {
+      "name": "run: acknowledged, then 'Running' bit measured",
+      "ok": true,
+      "detail": "Reached target (measured) · Status word target bit 0 = 1 · now 3"
+    },
+    {
+      "name": "60 Hz is rejected next to the field (never clamped), no dialog",
+      "ok": true,
+      "detail": "Outside 0 to 50. The value is rejected, not clamped."
+    },
+    {
+      "name": "button names the action and value",
+      "ok": true,
+      "detail": "Apply frequency setpoint 30.00 Hz"
+    },
+    {
+      "name": "confirm dialog: device, unit ID, register, function, old → new, raw value, frame (hex) that matches them",
+      "ok": true,
+      "detail": "{\"label\":\"Apply frequency setpoint 30.00 Hz\",\"newValue\":\"30.00 Hz\",\"frame\":\"02 06 00 01 0B B8 DF 7B\",\"unit\":\"2\",\"fn\":\"FC06 Write Single Register\",\"raw\":\"0BB8 (3000)\",\"register\":\"Frequency setpoint · holding_register (40002) · PDU offset 1\",\"focus\":\"confirm-cancel\",\"fields\":[\"Device\",\"Unit ID\",\"Register\",\"Function\",\"Old value\",\"New value\",\"Raw register value\",\"Frame to send (hex)\",\"Read back from\",\"Risk\"]}"
+    },
+    {
+      "name": "30.0 Hz: write acknowledged and read-back verified",
+      "ok": true,
+      "detail": "verified · 30.00 Hz"
+    },
+    {
+      "name": "process feedback shown separately (pending while the drive ramps)",
+      "ok": true,
+      "detail": "Pending: process has not reached the target yet · Output frequency target 30.00 Hz ± 0.05 · 1 min left"
+    },
+    {
+      "name": "process reached target 30.0 Hz (measured output frequency)",
+      "ok": true,
+      "detail": "Reached target (measured) · Output frequency target 30.00 Hz ± 0.05 · now 30.00 Hz"
+    },
+    {
+      "name": "software stop also needs confirmation",
+      "ok": true,
+      "detail": "Software stop. Not an emergency stop."
+    },
+    {
+      "name": "software stop: read-back verified, output reached 0 Hz",
+      "ok": true,
+      "detail": "Reached target (measured) · Output frequency target 30.00 Hz ± 0.05 · now 30.00 Hz"
+    },
+    {
+      "name": "audit log lists results, process feedback and the frame shown in the dialog",
+      "ok": false,
+      "detail": "{\"n\":15,\"results\":3,\"feedback\":2,\"frame\":true}"
+    },
+    {
+      "name": "audit CSV export: ISO-8601 UTC times, set_frequency result verified",
+      "ok": true,
+      "detail": "buslink-audit-s1794438191979.csv"
+    },
+    {
+      "name": "audit XLSX export written",
+      "ok": true,
+      "detail": "buslink-audit-s1794438191979.xlsx"
+    },
+    {
+      "name": "session report: devices with profile versions, simulated note, commands with read-back and feedback",
+      "ok": true,
+      "detail": "{\"devices\":3,\"sim\":\"This session includes simulated devices. Their results are simulator results, not hardware evidence.\",\"commands\":\"12/11/2026, 06:03:15 (2026-11-11T23:03:15.539Z)sim-vfd-basic-u2run0.000 → 1.000acknowledgedverified (1.000)reached (3.000)trainee (operator) | 12/11/2026, 06:03:17 (2026-11-11T23:03:17.636Z)sim-vfd-basic-u2set_frequency0.000 → 30.000acknowledgedverified (30.000)reached (30.000)trainee (operator) | 1\",\"version\":true}"
+    },
+    {
+      "name": "report saved as self-contained HTML (no script)",
+      "ok": true,
+      "detail": "buslink-report-s1794438191979.html"
+    },
+    {
+      "name": "report prints to PDF (print media CSS, via CDP Page.printToPDF)",
+      "ok": true,
+      "detail": "81478 bytes"
+    },
+    {
+      "name": "journey ran without an exception",
+      "ok": false,
+      "detail": "TimeoutError: Waiting for selector `[data-testid=arm]` failed\n    at CSSQueryHandler.waitFor (file:///D:/KERJA/PT%20AGS/RnD/Hackathon/Kirowen_2026/BusLink-Studio/node_modules/puppeteer-core/lib/puppeteer/common/QueryHandler.js:211:46)\n    at async CdpFrame.waitForSelector (file:///D:/KERJA/PT%20AGS/RnD/Hackathon/Kirowen_2026/BusLink-Studio/node_modules/puppeteer-core/lib/puppeteer/api/Frame.js:546:21)\n    at async CdpPage.waitForSelector (file:///D:/KERJA/PT%20AGS/RnD/Hackathon/Kirowen_2026/BusLink-Studio/node_modules/puppeteer-core/lib/puppeteer/api/Page.js:1487:20)\n    at async run (file:///D:/KERJA/PT%20AGS/RnD/Hackathon/Kirowen_2026/BusLink-Studio/scripts/verify-control.mjs:253:5)\n    at async file:///D:/KERJA/PT%20AGS/RnD/Hackathon/Kirowen_2026/BusLink-Studio/scripts/verify-control.mjs:273:1"
+    }
+  ],
+  "summary": "23/25 passed"
+}

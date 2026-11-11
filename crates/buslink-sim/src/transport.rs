@@ -36,6 +36,8 @@ pub struct SimTransport {
     mbap: MbapReceiver,
     pending: VecDeque<(u64, Vec<u8>)>,
     closed: bool,
+    /// Line speed of an RTU link; `None` = devices answer at any baud.
+    baud: Option<u32>,
 }
 
 /// Length of the RTU request starting at `buf[0]`, if it can be known yet.
@@ -65,12 +67,20 @@ impl SimTransport {
             mbap: MbapReceiver::new(),
             pending: VecDeque::new(),
             closed: false,
+            baud: None,
         }
     }
 
     /// A simulated RS485 bus with RTU framing.
     pub fn rtu(world: SharedWorld, clock: Arc<dyn Clock>, chunking: Chunking) -> Self {
         Self::new(world, clock, Mode::Rtu, chunking)
+    }
+
+    /// A simulated RS485 bus running at `baud`: devices set to another baud stay silent.
+    pub fn rtu_at(world: SharedWorld, clock: Arc<dyn Clock>, chunking: Chunking, baud: u32) -> Self {
+        let mut t = Self::new(world, clock, Mode::Rtu, chunking);
+        t.baud = Some(baud);
+        t
     }
 
     /// A simulated Modbus TCP connection (MBAP framing).
@@ -105,7 +115,7 @@ impl SimTransport {
         self.world
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .handle_rtu(frame, now)
+            .handle_rtu_at(frame, now, self.baud)
     }
 }
 

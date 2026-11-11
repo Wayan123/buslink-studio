@@ -138,6 +138,25 @@ class Invalid(unittest.TestCase):
     def test_doc_label_as_address_rejected(self):
         self.assertError(mutate(SENSOR, lambda d: d["registers"][0].update(address="40001")), "integer")
 
+    def test_command_feedback(self):
+        ok = mutate(VFD, lambda d: d["commands"][2].update(
+            feedback={"register": "freq_out", "tolerance": 0.1, "timeout_ms": 60000}))
+        self.assertEqual(errors(ok), [])
+        bit = mutate(VFD, lambda d: d["commands"][0].update(
+            feedback={"register": "status_word", "bit": 0, "value": 1, "tolerance": 0, "timeout_ms": 3000}))
+        self.assertEqual(errors(bit), [])
+        self.assertError(mutate(VFD, lambda d: d["commands"][0].update(
+            feedback={"register": "freq_out", "tolerance": 0.1, "timeout_ms": 3000})), "feedback.value")
+        self.assertError(mutate(VFD, lambda d: d["commands"][0].update(
+            feedback={"register": "status_word", "bit": 0, "value": 2, "tolerance": 0, "timeout_ms": 3000})),
+            "feedback.value")
+        self.assertError(mutate(VFD, lambda d: d["commands"][2].update(
+            feedback={"register": "nope", "tolerance": -1, "timeout_ms": 50})), "feedback.register")
+        self.assertError(mutate(VFD, lambda d: d["commands"][2].update(
+            feedback={"register": "freq_out", "tolerance": -1, "timeout_ms": 3000})), "feedback.tolerance")
+        self.assertError(mutate(VFD, lambda d: d["commands"][2].update(
+            feedback={"register": "freq_out", "tolerance": 1, "timeout_ms": 3000, "expr": "x"})), "unknown key")
+
     def test_bad_type(self):
         self.assertError(mutate(SENSOR, lambda d: d["registers"][0].update(type="float")), "type")
 

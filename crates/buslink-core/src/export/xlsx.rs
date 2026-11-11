@@ -2,7 +2,8 @@
 //! Numbers are written as numbers; text cells pass through the formula guard
 //! and are written as strings (never as formulas).
 
-use super::{ExportDoc, MEASUREMENT_COLUMNS, guard_text, raw_hex};
+use super::{AUDIT_COLUMNS, ExportDoc, MEASUREMENT_COLUMNS, guard_text, raw_hex};
+use crate::historian::AuditRow;
 use crate::time::iso8601_utc_ms;
 use rust_xlsxwriter::{Workbook, Worksheet, XlsxError};
 
@@ -143,10 +144,15 @@ pub fn workbook(doc: &ExportDoc) -> Result<Vec<u8>, XlsxError> {
         .collect();
     write_rows(ws, &["ts_utc", "kind", "device", "tag", "severity", "text"], rows)?;
 
+    commands_sheet(&mut wb, &doc.commands)?;
+    wb.save_to_buffer()
+}
+
+/// The audit rows as a "Commands" sheet (session export and the audit view's XLSX).
+fn commands_sheet(wb: &mut Workbook, rows_in: &[AuditRow]) -> Result<(), XlsxError> {
     let ws = wb.add_worksheet();
     ws.set_name("Commands")?;
-    let rows = doc
-        .commands
+    let rows = rows_in
         .iter()
         .map(|c| {
             vec![
@@ -176,34 +182,13 @@ pub fn workbook(doc: &ExportDoc) -> Result<Vec<u8>, XlsxError> {
             ]
         })
         .collect();
-    write_rows(
-        ws,
-        &[
-            "ts_utc",
-            "session_id",
-            "user",
-            "role",
-            "event",
-            "device_id",
-            "profile_id",
-            "profile_version",
-            "unit_id",
-            "function",
-            "address",
-            "register_id",
-            "command_id",
-            "old_value",
-            "requested_value",
-            "raw_value_hex",
-            "request_hex",
-            "response_hex",
-            "exception",
-            "ack",
-            "readback",
-            "readback_value",
-            "note",
-        ],
-        rows,
-    )?;
+    write_rows(ws, &AUDIT_COLUMNS, rows)?;
+    Ok(())
+}
+
+/// Audit log only (audit view export).
+pub fn audit_workbook(rows: &[AuditRow]) -> Result<Vec<u8>, XlsxError> {
+    let mut wb = Workbook::new();
+    commands_sheet(&mut wb, rows)?;
     wb.save_to_buffer()
 }

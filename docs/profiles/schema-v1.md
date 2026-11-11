@@ -65,11 +65,12 @@ Registers that overlap in the same table produce a warning (aliases are allowed 
 
 ## `commands` (simulated devices only in v1)
 
-`{ id, kind, label, register, readback_register, value?, expected?, timeout_ms? }`
+`{ id, kind, label, register, readback_register, value?, expected?, timeout_ms?, feedback? }`
 
 - `kind`: `run` · `stop` · `setpoint` · `reset_fault` · `mode`.
 - `register` must be a `read_write` register of the same profile; `readback_register` is required.
 - `setpoint` has no fixed `value`: the operator enters it and the register's `write` bounds apply. Other kinds need a numeric `value`.
+- `feedback` (added 2026-11-13, commissioning-control): `{ register, tolerance, timeout_ms, value?, bit? }`. The live register that shows whether the **process** reached the target, which is a different question from the read-back of the written register. `register` is any register of the profile; `tolerance` ≥ 0 in engineering units; `timeout_ms` 100–3 600 000. `value` is the target; it may be omitted only for `setpoint` commands (target = the entered value). `bit` 0–15 compares one bit of a bitfield register with `value` 0 or 1.
 - The command service still applies arming, confirmation, read-back and audit (`.kiro/steering/safety.md`).
 
 ## `comm_config`

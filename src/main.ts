@@ -9,6 +9,10 @@ import { store } from "./store.ts";
 import { applyTheme, themeChoice, type ThemeChoice } from "./theme.ts";
 import type { AlarmView, LinkView } from "./types.ts";
 import { alarmBanner, alarmsView, alarmTitle } from "./views/alarms.ts";
+import { auditView } from "./views/audit.ts";
+import { commissionView } from "./views/commission.ts";
+import { controlView } from "./views/control.ts";
+import { reportView } from "./views/report.ts";
 import { connectView } from "./views/connect.ts";
 import { dashboardView } from "./views/dashboard.ts";
 import { inspectorView } from "./views/inspector.ts";
@@ -26,6 +30,10 @@ const NAV: [string, string][] = [
   ["#/trends", "nav.trends"],
   ["#/inspector", "nav.inspector"],
   ["#/alarms", "nav.alarms"],
+  ["#/control", "nav.control"],
+  ["#/commission", "nav.commission"],
+  ["#/audit", "nav.audit"],
+  ["#/report", "nav.report"],
   ["#/training", "nav.training"],
 ];
 
@@ -49,6 +57,10 @@ function route(): void {
     trends: () => trendsView({ device: param }),
     inspector: () => inspectorView({ device: param }),
     alarms: () => alarmsView(),
+    control: () => controlView({ device: param }),
+    commission: () => commissionView({ device: param }),
+    audit: () => auditView(),
+    report: () => reportView(),
     training: () => trainingView(),
   };
   const fallback = store.links.length ? "dashboard" : "connect";
@@ -132,6 +144,10 @@ function announceChanges(links: LinkView[] | null, alarms: AlarmView[] | null): 
 async function boot(): Promise<void> {
   shell();
   window.addEventListener("hashchange", route);
+  // Safety rule 3: arming is dropped when the app goes to the background (minimized, phone home button).
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden && hasBackend()) void api.controlDisarm("app_background").catch(() => undefined);
+  });
   if (!hasBackend()) {
     route();
     return;

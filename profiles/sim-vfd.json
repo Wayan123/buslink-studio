@@ -2,7 +2,7 @@
   "$schema": "./schema/buslink-profile.schema.json",
   "schema_version": 1,
   "profile_id": "sim.vfd-basic",
-  "profile_version": "1.0.0",
+  "profile_version": "1.1.0",
   "vendor": "BusLink simulator",
   "model": { "en": "Simulated VFD", "id": "VFD simulasi" },
   "category": "simulated device",
@@ -12,7 +12,7 @@
   },
   "support_level": "simulated",
   "simulated_only": true,
-  "capabilities": { "read": "simulated", "write": "simulated", "comm_config": "unsupported", "control": "simulated" },
+  "capabilities": { "read": "simulated", "write": "simulated", "comm_config": "simulated", "control": "simulated" },
   "transport": {
     "simulator": { "model": "vfd_basic" },
     "rtu": { "unit_id": 2, "baud": 9600, "data_bits": 8, "parity": "none", "stop_bits": 1 },
@@ -67,27 +67,53 @@
       "id": "motor_current",
       "name": { "en": "Motor current", "id": "Arus motor" },
       "table": "holding_register", "address": 6, "type": "u16", "scale": 0.1, "unit": "A", "decimals": 1
+    },
+    {
+      "id": "comm_unit_id",
+      "name": { "en": "Modbus unit ID", "id": "Unit ID Modbus" },
+      "description": { "en": "Simulator design: takes effect right after the reply.", "id": "Desain simulator: berlaku segera setelah balasan." },
+      "table": "holding_register", "address": 10, "type": "u16", "valid_range": [1, 247], "access": "read_write",
+      "write": { "min": 1, "max": 247, "step": 1, "risk": "high", "role": "commissioner" }
+    },
+    {
+      "id": "comm_baud",
+      "name": { "en": "Baud rate code", "id": "Kode baud rate" },
+      "description": { "en": "0 = 4800, 1 = 9600, 2 = 19200, 3 = 38400 (simulator design). Takes effect right after the reply.", "id": "0 = 4800, 1 = 9600, 2 = 19200, 3 = 38400 (desain simulator). Berlaku segera setelah balasan." },
+      "table": "holding_register", "address": 11, "type": "u16", "access": "read_write",
+      "write": { "allowed_values": [0, 1, 2, 3], "risk": "high", "role": "commissioner" }
     }
   ],
   "commands": [
     {
       "id": "run", "kind": "run", "label": { "en": "Run drive", "id": "Jalankan drive" },
-      "register": "control_word", "value": 1, "readback_register": "control_word", "timeout_ms": 2000
+      "register": "control_word", "value": 1, "readback_register": "control_word", "timeout_ms": 2000,
+      "feedback": { "register": "status_word", "bit": 0, "value": 1, "tolerance": 0, "timeout_ms": 3000 }
     },
     {
       "id": "stop", "kind": "stop",
       "label": { "en": "Software stop. Not an emergency stop.", "id": "Stop perangkat lunak. Bukan tombol darurat." },
-      "register": "control_word", "value": 0, "readback_register": "control_word", "timeout_ms": 2000
+      "register": "control_word", "value": 0, "readback_register": "control_word", "timeout_ms": 2000,
+      "feedback": { "register": "output_freq", "value": 0, "tolerance": 0.05, "timeout_ms": 65000 }
     },
     {
       "id": "set_frequency", "kind": "setpoint", "label": { "en": "Apply frequency setpoint", "id": "Terapkan setpoint frekuensi" },
-      "register": "freq_setpoint", "readback_register": "freq_setpoint"
+      "register": "freq_setpoint", "readback_register": "freq_setpoint",
+      "feedback": { "register": "output_freq", "tolerance": 0.05, "timeout_ms": 65000 }
+    },
+    {
+      "id": "set_ramp", "kind": "setpoint", "label": { "en": "Apply ramp time", "id": "Terapkan waktu ramp" },
+      "register": "ramp_time", "readback_register": "ramp_time"
     },
     {
       "id": "reset_fault", "kind": "reset_fault", "label": { "en": "Reset fault", "id": "Reset fault" },
-      "register": "control_word", "value": 4, "readback_register": "fault_code", "expected": 0
+      "register": "control_word", "value": 4, "readback_register": "fault_code", "expected": 0,
+      "feedback": { "register": "fault_code", "value": 0, "tolerance": 0, "timeout_ms": 3000 }
     }
   ],
+  "comm_config": {
+    "unit_id": { "register": "comm_unit_id", "apply": "immediate" },
+    "baud": { "register": "comm_baud", "apply": "immediate", "codes": { "0": 4800, "1": 9600, "2": 19200, "3": 38400 } }
+  },
   "notes": [
     {
       "en": "Simulated device: exists only in the BusLink simulator. Register map, ranges and fault codes are simulator design choices.",

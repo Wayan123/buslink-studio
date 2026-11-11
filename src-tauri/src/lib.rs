@@ -1,7 +1,8 @@
 //! BusLink Studio Tauri shell: IPC over the core session service.
-//! Monitoring only in this release of the shell (safety rules 1–2).
+//! Writes exist only through `control.rs` → `buslink_core::command` (safety rules 1–2).
 
 mod commands;
+mod control;
 mod serial;
 mod state;
 
@@ -47,6 +48,25 @@ pub fn run() {
             commands::training_start,
             commands::training_fault,
             commands::training_clear,
+            control::control_status,
+            control::control_arm,
+            control::control_disarm,
+            control::control_preview,
+            control::control_confirm,
+            control::control_execute,
+            control::control_cancel,
+            control::wizard_support,
+            control::wizard_start,
+            control::wizard_preview,
+            control::wizard_power_cycled,
+            control::wizard_reconnect,
+            control::wizard_verify,
+            control::wizard_revert,
+            control::wizard_close,
+            control::audit_list,
+            control::audit_export,
+            control::report_data,
+            control::report_save_html,
         ])
         .build(tauri::generate_context!());
     let app = match app {
@@ -61,6 +81,7 @@ pub fn run() {
             && let Some(st) = handle.try_state::<state::AppState>()
         {
             st.stop.store(true, Ordering::SeqCst);
+            st.control.disarm(buslink_core::command::DisarmReason::AppBackground);
             st.session.shutdown();
         }
     });

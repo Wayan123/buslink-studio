@@ -1,11 +1,13 @@
 //! Simulated VFD. Holding registers (simulator design, see profiles/sim-vfd.json):
 //! 0 control word (rw: 0 stop, 1 run, 4 reset fault), 1 setpoint ×0.01 Hz (rw 0–5000),
 //! 2 ramp time 0–50 Hz ×0.1 s (rw 1–600), 3 output frequency ×0.01 Hz,
-//! 4 status (bit0 running, bit1 at speed, bit3 fault), 5 fault code, 6 motor current ×0.1 A.
+//! 4 status (bit0 running, bit1 at speed, bit3 fault), 5 fault code, 6 motor current ×0.1 A,
+//! 10 unit ID and 11 baud code (rw, see `comm.rs`).
 //!
 //! A run command while a fault is latched is acknowledged but the drive stays
 //! stopped: "write acknowledged" is not "process reached target".
 
+use super::comm::CommRegs;
 use super::{SimModel, register_values};
 use crate::image::{ImageBuilder, RegisterImage, quantise};
 use buslink_core::command::wire::WriteRequest;
@@ -24,6 +26,7 @@ pub struct Vfd {
     pub running: bool,
     pub fault_code: u16,
     pub current_a: f64,
+    pub comm: CommRegs,
 }
 
 impl Vfd {
@@ -36,6 +39,7 @@ impl Vfd {
             running: false,
             fault_code: 0,
             current_a: 0.0,
+            comm: CommRegs::default(),
         }
     }
 
@@ -99,6 +103,7 @@ impl SimModel for Vfd {
             .bits(h, 4, self.status())
             .u16(h, 5, self.fault_code, false)
             .u16(h, 6, quantise(self.current_a.max(0.0), 0.1, 0.0, 65535.0) as u16, false);
+        self.comm.image(&mut b);
         b.build()
     }
 
@@ -113,6 +118,7 @@ impl SimModel for Vfd {
                 0 => matches!(v, 0 | 1 | 4),
                 1 => *v <= 5000,
                 2 => (1..=600).contains(v),
+                a if CommRegs::handles(*a) => CommRegs::check(*a, *v).is_ok(),
                 _ => false,
             };
             if !ok {
@@ -139,10 +145,15 @@ impl SimModel for Vfd {
                     }
                 },
                 1 => self.setpoint_hz = f64::from(v) * 0.01,
-                _ => self.ramp_s = f64::from(v) * 0.1,
+                2 => self.ramp_s = f64::from(v) * 0.1,
+                a => self.comm.apply(a, v),
             }
         }
         Ok(())
+    }
+
+    fn comm(&mut self) -> Option<&mut CommRegs> {
+        Some(&mut self.comm)
     }
 
     fn as_any_mut(&mut self) -> &mut dyn Any {

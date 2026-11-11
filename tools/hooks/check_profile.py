@@ -63,7 +63,8 @@ SOURCE_KEYS = {"document", "revision", "url", "pages", "retrieved", "publisher"}
 HW_KEYS = {"date", "adapter", "platform", "firmware", "unit_id", "record", "result", "notes"}
 RTU_KEYS = {"unit_id", "baud", "data_bits", "parity", "stop_bits", "response_timeout_ms", "inter_frame_ms"}
 TCP_KEYS = {"unit_id", "port", "response_timeout_ms"}
-CMD_KEYS = {"id", "kind", "label", "register", "value", "readback_register", "expected", "timeout_ms"}
+CMD_KEYS = {"id", "kind", "label", "register", "value", "readback_register", "expected", "timeout_ms", "feedback"}
+FEEDBACK_KEYS = {"register", "tolerance", "timeout_ms", "value", "bit"}
 CAP_KEYS = {"read", "write", "comm_config", "control"}
 
 
@@ -531,6 +532,27 @@ def validate(doc) -> Report:
                 if c.get("expected") is not None and not is_num(c.get("expected")):
                     r.err(f"{p}.expected", "must be a number (engineering units of the readback register)")
                 int_range(r, f"{p}.timeout_ms", c.get("timeout_ms"), 100, 30_000, required=False)
+                fb = c.get("feedback")
+                if fb is not None:
+                    fp = f"{p}.feedback"
+                    if not isinstance(fb, dict):
+                        r.err(fp, "must be an object")
+                    else:
+                        keys(r, fp, fb, FEEDBACK_KEYS)
+                        if lookup(fb.get("register")) is None:
+                            r.err(f"{fp}.register", "required; must name a register of this profile")
+                        tol = fb.get("tolerance")
+                        if not (is_num(tol) and tol >= 0):
+                            r.err(f"{fp}.tolerance", "required; a number >= 0 in engineering units")
+                        int_range(r, f"{fp}.timeout_ms", fb.get("timeout_ms"), 100, 3_600_000)
+                        if fb.get("value") is not None and not is_num(fb.get("value")):
+                            r.err(f"{fp}.value", "must be a number (engineering units of the feedback register)")
+                        if fb.get("bit") is not None:
+                            int_range(r, f"{fp}.bit", fb.get("bit"), 0, 15)
+                            if not (is_int(fb.get("value")) and fb.get("value") in (0, 1)):
+                                r.err(f"{fp}.value", "a bit feedback needs value 0 or 1")
+                        elif fb.get("value") is None and kind != "setpoint":
+                            r.err(f"{fp}.value", "required unless the command is a setpoint (target = entered value)")
 
     cc = doc.get("comm_config")
     if cc is not None:

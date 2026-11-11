@@ -56,6 +56,30 @@ export function bufferToSeries(b: TrendBuffer | undefined, from: number, to: num
   return out;
 }
 
+/** Shortest live x span, so a chart opened in the first seconds of a session is not a single column. */
+export const MIN_LIVE_SPAN_MS = 30_000;
+
+/**
+ * Live x range: from the first buffered point (the session's data start) to now, capped at the
+ * chosen window. Without data the full window is shown. Only the axis fits; no point is invented.
+ */
+export function liveBounds(now: number, windowMs: number, firstMs: number | undefined): { from: number; to: number } {
+  const capped = now - windowMs;
+  if (firstMs === undefined || !Number.isFinite(firstMs)) return { from: capped, to: now };
+  const from = Math.max(capped, Math.min(firstMs, now - MIN_LIVE_SPAN_MS));
+  return { from, to: now };
+}
+
+/** Earliest timestamp over the given buffers (any quality: a gap at the start is still shown). */
+export function firstPointMs(buffers: (TrendBuffer | undefined)[]): number | undefined {
+  let first: number | undefined;
+  for (const b of buffers) {
+    const t = b?.t[0];
+    if (t !== undefined && (first === undefined || t < first)) first = t;
+  }
+  return first;
+}
+
 /** Merge several series onto one x array for uPlot. Own nulls stay null; other series' x get undefined. */
 export function align(series: Series[]): { x: number[]; ys: (number | null | undefined)[][] } {
   const xs = [...new Set(series.flatMap((s) => s.t))].sort((a, b) => a - b);

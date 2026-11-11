@@ -110,7 +110,7 @@ pub const RTU_KEYS: [&str; 7] = [
     "inter_frame_ms",
 ];
 pub const TCP_KEYS: [&str; 3] = ["unit_id", "port", "response_timeout_ms"];
-pub const CMD_KEYS: [&str; 8] = [
+pub const CMD_KEYS: [&str; 9] = [
     "id",
     "kind",
     "label",
@@ -119,7 +119,9 @@ pub const CMD_KEYS: [&str; 8] = [
     "readback_register",
     "expected",
     "timeout_ms",
+    "feedback",
 ];
+pub const FEEDBACK_KEYS: [&str; 5] = ["register", "tolerance", "timeout_ms", "value", "bit"];
 pub const CAP_KEYS: [&str; 4] = ["read", "write", "comm_config", "control"];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -358,6 +360,52 @@ fn int_range(r: &mut Report, path: &str, v: Option<&J>, lo: i128, hi: i128, requ
             r.err(path, format!("must be an integer {lo}..{hi}"));
             false
         }
+    }
+}
+
+fn check_feedback(r: &mut Report, fp: &str, fb: &J, setpoint: bool, register_known: bool) {
+    let Some(m) = fb.as_obj() else {
+        r.err(fp, "must be an object");
+        return;
+    };
+    let o = Obj(m);
+    keys(r, fp, &o, &FEEDBACK_KEYS);
+    if !register_known {
+        r.err(
+            format!("{fp}.register"),
+            "required; must name a register of this profile",
+        );
+    }
+    if !num_of(o.get("tolerance")).is_some_and(|t| t >= 0.0) {
+        r.err(
+            format!("{fp}.tolerance"),
+            "required; a number >= 0 in engineering units",
+        );
+    }
+    int_range(
+        r,
+        &format!("{fp}.timeout_ms"),
+        o.get("timeout_ms"),
+        100,
+        3_600_000,
+        true,
+    );
+    if o.has("value") && num_of(o.get("value")).is_none() {
+        r.err(
+            format!("{fp}.value"),
+            "must be a number (engineering units of the feedback register)",
+        );
+    }
+    if o.has("bit") {
+        int_range(r, &format!("{fp}.bit"), o.get("bit"), 0, 15, true);
+        if !int_of(o.get("value")).is_some_and(|v| v == 0 || v == 1) {
+            r.err(format!("{fp}.value"), "a bit feedback needs value 0 or 1");
+        }
+    } else if !o.has("value") && !setpoint {
+        r.err(
+            format!("{fp}.value"),
+            "required unless the command is a setpoint (target = entered value)",
+        );
     }
 }
 
@@ -1047,6 +1095,12 @@ pub fn validate(doc: &J) -> Report {
                         30_000,
                         false,
                     );
+                    if let Some(fb) = co.get("feedback") {
+                        let known = fb
+                            .as_obj()
+                            .is_some_and(|m| lookup(str_of(Obj(m).get("register"))).is_some());
+                        check_feedback(&mut r, &format!("{p}.feedback"), fb, is_str(kind, "setpoint"), known);
+                    }
                 }
             }
         }
