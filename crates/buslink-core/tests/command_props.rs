@@ -37,22 +37,9 @@ impl World {
         // VFD at unit 2: control 0, setpoint 0, ramp 5.0 s, rest 0. Temp controller at unit 3.
         bus.add(
             2,
-            &[
-                (0, 0),
-                (1, 0),
-                (2, 50),
-                (3, 0),
-                (4, 0),
-                (5, 0),
-                (6, 0),
-                (10, 2),
-                (11, 1),
-            ],
+            &[(0, 0), (1, 0), (2, 50), (3, 0), (4, 0), (5, 0), (6, 0), (7, 2), (8, 1)],
         );
-        bus.add(
-            3,
-            &[(0, 250), (1, 400), (2, 0), (3, 0), (4, 0), (5, 0), (10, 3), (11, 1)],
-        );
+        bus.add(3, &[(0, 250), (1, 400), (2, 0), (3, 0), (4, 0), (5, 0), (6, 3), (7, 1)]);
         let (t, h) = FakeTransport::new(clock.clone(), bus.responder());
         let ex = Exchanger::new(Framing::Rtu, clock.clone() as Arc<dyn Clock>, 5);
         Self { clock, bus, t, h, ex }
@@ -773,7 +760,7 @@ fn c3_comm_config_rules() {
     // Baud 19200 is code 2; read-back is deferred to the reconnect.
     let p = svc.preview(&mut w.link(), cc(CommSettingKind::Baud, 19_200)).unwrap();
     assert_eq!(p.raw_registers, vec![2]);
-    assert_eq!(p.address, 11);
+    assert_eq!(p.address, 8);
     let change = p.comm_change.clone().unwrap();
     assert_eq!(
         (change.setting, change.value, change.apply),

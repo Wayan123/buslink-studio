@@ -270,7 +270,7 @@ fn simulated_comm_registers_move_the_device() {
     });
     assert_eq!(o.ack, Ack::Acknowledged, "answered from the old unit ID");
     assert_eq!(r.read(2, 3, 1.0), None, "silent at the old unit ID");
-    assert_eq!(r.read(9, 10, 1.0), Some(9.0), "answers at the new one");
+    assert_eq!(r.read(9, 7, 1.0), Some(9.0), "answers at the new one");
 
     // Baud: the temperature controller moves to 19200; the 9600 line no longer reaches it.
     let t3 = r.target("sim-temp-controller.json", 3);
@@ -289,7 +289,7 @@ fn simulated_comm_registers_move_the_device() {
         19_200,
     );
     let mut ex = rtu_exchanger(&r.clock);
-    let req = ReadRequest::for_table(buslink_core::protocol::pdu::Table::HoldingRegister, 11, 1).unwrap();
+    let req = ReadRequest::for_table(buslink_core::protocol::pdu::Table::HoldingRegister, 7, 1).unwrap();
     let words = CommandLink::read(
         &mut DirectLink {
             transport: &mut fast,

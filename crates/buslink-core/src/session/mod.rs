@@ -757,6 +757,10 @@ impl Session {
             e.generation = self.shared.next_generation();
         }
         self.shared.bump_links();
+        // Samples the worker published just before it stopped may still be on the bus.
+        // Wait until the hub applied them, or a tag seen for the first time in that window
+        // would never be marked DISCONNECTED and would keep showing GOOD.
+        self.wait_ingested(Duration::from_millis(1000));
         self.publish_disconnected(link_id, "disconnected by the user");
         self.shared
             .event("link", None, None, "info", format!("link {link_id} disconnected"));
@@ -778,6 +782,15 @@ impl Session {
         lock(&self.shared.frames).clear_link(link_id);
         self.shared.bump_links();
         Ok(())
+    }
+
+    /// Block (bounded) until the live store has applied every sample published so far.
+    fn wait_ingested(&self, max: Duration) {
+        let target = *lock(&self.shared.publish_lock);
+        let end = std::time::Instant::now() + max;
+        while lock(&self.shared.live).last_seq() < target && std::time::Instant::now() < end {
+            std::thread::sleep(Duration::from_millis(5));
+        }
     }
 
     fn publish_disconnected(&self, link_id: &str, why: &str) {

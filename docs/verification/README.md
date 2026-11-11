@@ -54,3 +54,24 @@ The first run showed the sticky header covering content at 360 px (it grew tall 
 - Screen readers; contrast was computed for the palette tokens, not measured on the rendered pages.
 - Trend drag-zoom and cursor tooltip were not exercised by the script.
 - The historian of the run lives in the user's app data directory (`%APPDATA%\id.co.arkamaya.buslink\buslink-history.sqlite3`); the script does not isolate it.
+
+# Verification: commissioning-control (E5), PRD journey 4
+
+Date: 2026-11-13. Same machine and method (`node scripts/verify-control.mjs` against the e2e build). **Simulated VFD only; not hardware evidence.** Results: `control-results.json` (25/25 passed); files written by the run: `export-control/` (audit CSV/XLSX, report HTML, report PDF via CDP `Page.printToPDF`).
+
+| Check | Screenshot |
+|---|---|
+| Control panel starts in Monitoring, "Simulated device" banner, commands disabled | `20-control-monitoring.png` |
+| Arm with a user name, countdown "Armed: control enabled for N s", software stop visible and labelled "Software stop. Not an emergency stop." | `21-control-armed.png` |
+| 60 Hz rejected next to the field, no dialog; button "Apply frequency setpoint 30.00 Hz" | |
+| Confirm dialog: device, unit ID, register (doc address + PDU offset), FC06, old → new, raw 0BB8 (3000), frame hex; the script checks the frame bytes against the other fields | `22-confirm-30hz.png` |
+| Write acknowledged + read-back verified while process feedback is still "Pending" | `23-ack-pending.png` |
+| Output frequency reached 30.00 Hz ± 0.05 (measured) | `24-reached-30hz.png` |
+| Software stop: confirmed, read back, output reached 0 Hz | `25-stopped.png` |
+| Audit log with results, feedback rows and the sent frame; CSV/XLSX export | `26-audit.png` |
+| Session report (devices + profile versions, simulated note, commands with read-back and feedback); HTML without script; PDF | `27-report.png` |
+| Disconnect drops the arm with a stated reason | `28-disarmed-after-disconnect.png` |
+
+Journey 1 (`verify-journey.mjs`) was re-run after these changes: 15/15.
+
+Not verified: the commissioning wizard in the UI (covered by core tests J3 only), the WebView print dialog itself (the PDF came from CDP), the `app_background` disarm on Android, any real device.

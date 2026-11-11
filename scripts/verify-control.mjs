@@ -189,8 +189,9 @@ async function run() {
     d = await confirmDialog(page);
     step("software stop also needs confirmation", d.open, d.info?.label ?? "");
     await page.click("[data-testid=confirm-send]");
-    const stopRb = await waitFor(page, () => /^verified/.test(document.querySelector("[data-testid=res-readback]")?.textContent ?? ""), 8000);
-    const stopped = await waitFor(page, () => /^Reached target/.test(document.querySelector("[data-testid=res-feedback]")?.textContent ?? ""), 20000);
+    // Wait for the stop's own result (the previous command's "Reached" must not count).
+    const stopRb = await waitFor(page, () => /^verified · 0$/.test(document.querySelector("[data-testid=res-readback]")?.textContent ?? ""), 8000);
+    const stopped = await waitFor(page, () => /^Reached target.*target 0.00 Hz/.test(document.querySelector("[data-testid=res-feedback]")?.textContent ?? ""), 20000);
     step("software stop: read-back verified, output reached 0 Hz", stopRb && stopped, await text(page, "[data-testid=res-feedback]"));
     await shot(page, "25-stopped.png");
 
@@ -250,8 +251,8 @@ async function run() {
 
     // Disconnect drops the arm; nothing resumes on reconnect.
     await page.evaluate((h) => (location.hash = h), vfdHref);
-    await page.waitForSelector("[data-testid=arm]", { timeout: 8000 });
-    await page.click("[data-testid=arm]");
+    await page.waitForSelector("[data-testid=arm], [data-testid=disarm]", { timeout: 8000 });
+    if (await page.$("[data-testid=arm]")) await page.click("[data-testid=arm]");
     await waitFor(page, () => /Armed/.test(document.querySelector("[data-testid=arm-text]")?.textContent ?? ""), 5000);
     await page.evaluate(() => (location.hash = "#/connect"));
     await sleep(800);

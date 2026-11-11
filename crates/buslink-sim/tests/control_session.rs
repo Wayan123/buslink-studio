@@ -266,7 +266,7 @@ fn wizard_unit_id_and_baud_pass() {
     assert!(r.control.wizard_preview().is_err(), "arm first");
     r.control.arm(&r.vfd, "tech", Role::Commissioner).unwrap();
     let p = r.control.wizard_preview().unwrap();
-    assert_eq!((p.address, p.raw_registers.clone()), (10, vec![5]));
+    assert_eq!((p.address, p.raw_registers.clone()), (7, vec![5]));
     r.control.confirm(p.id).unwrap();
     let o = r.control.execute().unwrap();
     assert_eq!((o.ack, o.readback), (Ack::Acknowledged, Readback::Unknown));

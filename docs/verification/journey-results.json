@@ -1,5 +1,5 @@
 {
-  "date": "2026-11-11T22:01:38.807Z",
+  "date": "2026-11-11T23:16:05.483Z",
   "platform": "Windows (WebView2 in the e2e build) + headless Chrome",
   "steps": [
     {
@@ -40,7 +40,7 @@
     {
       "name": "trend shows a gap 'No data: TIMEOUT'",
       "ok": true,
-      "detail": "Simulated temperature controller (simulated): Process temperature (PV) — No data: TIMEOUT · 05:01:43–05:01:45 | Simulated temperature controller (simulated): Setpoint (SP) — No data: TIMEOUT · 05:01:43–05:01:45"
+      "detail": "Simulated temperature controller (simulated): Process temperature (PV) — No data: TIMEOUT · 06:16:09–06:16:11 | Simulated temperature controller (simulated): Setpoint (SP) — No data: TIMEOUT · 06:16:09–06:16:11"
     },
     {
       "name": "register inspector lists frames including the timeouts",
@@ -50,12 +50,12 @@
     {
       "name": "export CSV with quality + age columns and TIMEOUT rows",
       "ok": true,
-      "detail": "buslink-s1794434500299.csv: 287 rows, 24 TIMEOUT rows for sim-temp-controller-basic-u3, 262 GOOD rows; header: ts_utc,ts_ms,device_id,tag_id,value,text,unit,quality,exception_code,age_ms,value_ts_utc,raw_hex,seq,profile_id,profile_version"
+      "detail": "buslink-s1794438965906.csv: 336 rows, 32 TIMEOUT rows for sim-temp-controller-basic-u3, 303 GOOD rows; header: ts_utc,ts_ms,device_id,tag_id,value,text,unit,quality,exception_code,age_ms,value_ts_utc,raw_hex,seq,profile_id,profile_version"
     },
     {
       "name": "app at 360 px: no horizontal page scroll",
       "ok": true,
-      "detail": "overflow -15px"
+      "detail": "overflow -14px"
     },
     {
       "name": "dist/ in headless Chrome (en, 360px): no backend notice, no page overflow, targets ≥ 24 px",
@@ -78,6 +78,6 @@
       "detail": "{\"cls\":\"skip\",\"outline\":\"solid\"}"
     }
   ],
-  "trend_render_note": "Raw samples from the live buffer · rendered in 4.1 ms",
+  "trend_render_note": "Raw samples from the live buffer · rendered in 4.2 ms",
   "summary": "15/15 passed"
 }

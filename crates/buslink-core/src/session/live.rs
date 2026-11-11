@@ -81,6 +81,7 @@ pub struct LiveStore {
     points: Vec<TrendPoint>,
     dropped: u64,
     applied: u64,
+    last_seq: u64,
 }
 
 impl LiveStore {
@@ -88,6 +89,7 @@ impl LiveStore {
         let view = view_of(s);
         let key = view.key.clone();
         self.applied += 1;
+        self.last_seq = self.last_seq.max(s.seq);
         if self.points.len() < MAX_POINTS_PER_FRAME {
             self.points.push(TrendPoint {
                 k: key.clone(),
@@ -117,6 +119,11 @@ impl LiveStore {
     /// Bus lag: samples that never reached this store.
     pub fn add_dropped(&mut self, n: u64) {
         self.dropped = self.dropped.saturating_add(n);
+    }
+
+    /// Highest sequence number applied so far.
+    pub fn last_seq(&self) -> u64 {
+        self.last_seq
     }
 
     /// Samples applied since the store was created.

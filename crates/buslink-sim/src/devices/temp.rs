@@ -1,7 +1,7 @@
 //! Simulated temperature controller. Holding registers (simulator design, see
 //! profiles/sim-temp-controller.json): 0 PV i16 ×0.1 °C, 1 SP i16 ×0.1 °C (rw 0–1200),
 //! 2 output ×0.1 %, 3 mode (rw 0 auto, 1 manual), 4 manual output ×0.1 % (rw 0–1000),
-//! 5 heater enable (rw 0/1), 10 unit ID and 11 baud code (rw, see `comm.rs`).
+//! 5 heater enable (rw 0/1), 6 unit ID and 7 baud code (rw, see `comm.rs`).
 //!
 //! Plant: τ·dPV/dt = ambient + gain·out/100 − PV (τ 60 s, gain 150 °C, ambient 25 °C).
 //! Auto mode: PI with anti-windup.
@@ -40,7 +40,7 @@ impl TempController {
             manual: false,
             manual_output: 0.0,
             heater_enabled: false,
-            comm: CommRegs::default(),
+            comm: CommRegs::at(6),
             integral: 0.0,
         }
     }
@@ -101,7 +101,7 @@ impl SimModel for TempController {
                 1 => (0..=1200).contains(&(*v as i16)),
                 3 | 5 => *v <= 1,
                 4 => *v <= 1000,
-                a if CommRegs::handles(*a) => CommRegs::check(*a, *v).is_ok(),
+                a if self.comm.handles(*a) => self.comm.check(*a, *v).is_ok(),
                 _ => false,
             };
             if !ok {

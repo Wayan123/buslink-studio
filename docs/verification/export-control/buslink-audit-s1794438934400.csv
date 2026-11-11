@@ -1,0 +1,17 @@
+ts_utc,session_id,user,role,event,device_id,profile_id,profile_version,unit_id,function,address,register_id,command_id,old_value,requested_value,raw_value_hex,request_hex,response_hex,exception,ack,readback,readback_value,note
+2026-11-11T23:15:35.204Z,s1794438934400,trainee,operator,arm,sim-vfd-basic-u2,sim.vfd-basic,1.1.0,2,,,,,,,,,,,,,,
+2026-11-11T23:15:37.494Z,s1794438934400,trainee,operator,preview,sim-vfd-basic-u2,sim.vfd-basic,1.1.0,2,6,0,control_word,run,0,1,0001,02 06 00 00 00 01 48 39,,,,,,
+2026-11-11T23:15:37.695Z,s1794438934400,trainee,operator,confirm,sim-vfd-basic-u2,sim.vfd-basic,1.1.0,2,6,0,control_word,run,0,1,0001,02 06 00 00 00 01 48 39,,,,,,
+2026-11-11T23:15:37.698Z,s1794438934400,trainee,operator,sent,sim-vfd-basic-u2,sim.vfd-basic,1.1.0,2,6,0,control_word,run,0,1,0001,02 06 00 00 00 01 48 39,,,,,,about to send (single attempt)
+2026-11-11T23:15:37.726Z,s1794438934400,trainee,operator,result,sim-vfd-basic-u2,sim.vfd-basic,1.1.0,2,6,0,control_word,run,0,1,0001,02 06 00 00 00 01 48 39,02 06 00 00 00 01 48 39,,acknowledged,verified,1,
+2026-11-11T23:15:39.083Z,s1794438934400,trainee,operator,feedback,sim-vfd-basic-u2,sim.vfd-basic,1.1.0,2,,,status_word,run,,1,,,,,,reached,3,"process feedback reached (target 1 ± 0, 3000 ms window)"
+2026-11-11T23:15:39.692Z,s1794438934400,trainee,operator,preview,sim-vfd-basic-u2,sim.vfd-basic,1.1.0,2,6,1,freq_setpoint,set_frequency,0,30,0BB8,02 06 00 01 0B B8 DF 7B,,,,,,
+2026-11-11T23:15:39.979Z,s1794438934400,trainee,operator,confirm,sim-vfd-basic-u2,sim.vfd-basic,1.1.0,2,6,1,freq_setpoint,set_frequency,0,30,0BB8,02 06 00 01 0B B8 DF 7B,,,,,,
+2026-11-11T23:15:39.984Z,s1794438934400,trainee,operator,sent,sim-vfd-basic-u2,sim.vfd-basic,1.1.0,2,6,1,freq_setpoint,set_frequency,0,30,0BB8,02 06 00 01 0B B8 DF 7B,,,,,,about to send (single attempt)
+2026-11-11T23:15:40.010Z,s1794438934400,trainee,operator,result,sim-vfd-basic-u2,sim.vfd-basic,1.1.0,2,6,1,freq_setpoint,set_frequency,0,30,0BB8,02 06 00 01 0B B8 DF 7B,02 06 00 01 0B B8 DF 7B,,acknowledged,verified,30,
+2026-11-11T23:15:44.143Z,s1794438934400,trainee,operator,feedback,sim-vfd-basic-u2,sim.vfd-basic,1.1.0,2,,,output_freq,set_frequency,,30,,,,,,reached,30,"process feedback reached (target 30 ± 0.05, 65000 ms window)"
+2026-11-11T23:15:44.411Z,s1794438934400,trainee,operator,preview,sim-vfd-basic-u2,sim.vfd-basic,1.1.0,2,6,0,control_word,stop,1,0,0000,02 06 00 00 00 00 89 F9,,,,,,
+2026-11-11T23:15:44.612Z,s1794438934400,trainee,operator,confirm,sim-vfd-basic-u2,sim.vfd-basic,1.1.0,2,6,0,control_word,stop,1,0,0000,02 06 00 00 00 00 89 F9,,,,,,
+2026-11-11T23:15:44.616Z,s1794438934400,trainee,operator,sent,sim-vfd-basic-u2,sim.vfd-basic,1.1.0,2,6,0,control_word,stop,1,0,0000,02 06 00 00 00 00 89 F9,,,,,,about to send (single attempt)
+2026-11-11T23:15:44.644Z,s1794438934400,trainee,operator,result,sim-vfd-basic-u2,sim.vfd-basic,1.1.0,2,6,0,control_word,stop,1,0,0000,02 06 00 00 00 00 89 F9,02 06 00 00 00 00 89 F9,,acknowledged,verified,0,
+2026-11-11T23:15:47.700Z,s1794438934400,trainee,operator,feedback,sim-vfd-basic-u2,sim.vfd-basic,1.1.0,2,,,output_freq,stop,,0,,,,,,reached,0,"process feedback reached (target 0 ± 0.05, 65000 ms window)"

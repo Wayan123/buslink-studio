@@ -83,7 +83,7 @@ Feedback mapping in the simulated profiles (version 1.1.0):
 
 ## 6. Simulator comm registers
 
-Holding 10 = unit ID (rw 1–247), holding 11 = baud code (rw `0` 4800, `1` 9600, `2` 19200, `3` 38400). Both `apply: immediate`, role commissioner, risk high. The model validates, answers the write at the old settings, and leaves a pending change that the world applies after building the reply: a new unit ID re-keys the device (refused if the ID is taken: the write is acknowledged but the device stays, so verification fails, as a real collision would); a new baud sets the device baud. `SimTransport` in RTU mode carries the link baud; a device with another baud stays silent. MBAP links ignore baud.
+Unit ID (rw 1–247) and baud code (rw `0` 4800, `1` 9600, `2` 19200, `3` 38400) sit right after each map: VFD holding 7/8, temperature controller holding 6/7, so every poll stays one contiguous FC03 read (a gap made two reads per cycle). Both `apply: immediate`, role commissioner, risk high. The model validates, answers the write at the old settings, and leaves a pending change that the world applies after building the reply: a new unit ID re-keys the device (refused if the ID is taken: the write is acknowledged but the device stays, so verification fails, as a real collision would); a new baud sets the device baud. `SimTransport` in RTU mode carries the link baud; a device with another baud stays silent. MBAP links ignore baud.
 
 ## 7. IPC (`src-tauri/src/control.rs`)
 

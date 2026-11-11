@@ -72,14 +72,14 @@
       "id": "comm_unit_id",
       "name": { "en": "Modbus unit ID", "id": "Unit ID Modbus" },
       "description": { "en": "Simulator design: takes effect right after the reply.", "id": "Desain simulator: berlaku segera setelah balasan." },
-      "table": "holding_register", "address": 10, "type": "u16", "valid_range": [1, 247], "access": "read_write",
+      "table": "holding_register", "address": 7, "type": "u16", "valid_range": [1, 247], "access": "read_write",
       "write": { "min": 1, "max": 247, "step": 1, "risk": "high", "role": "commissioner" }
     },
     {
       "id": "comm_baud",
       "name": { "en": "Baud rate code", "id": "Kode baud rate" },
       "description": { "en": "0 = 4800, 1 = 9600, 2 = 19200, 3 = 38400 (simulator design). Takes effect right after the reply.", "id": "0 = 4800, 1 = 9600, 2 = 19200, 3 = 38400 (desain simulator). Berlaku segera setelah balasan." },
-      "table": "holding_register", "address": 11, "type": "u16", "access": "read_write",
+      "table": "holding_register", "address": 8, "type": "u16", "access": "read_write",
       "write": { "allowed_values": [0, 1, 2, 3], "risk": "high", "role": "commissioner" }
     }
   ],

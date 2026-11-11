@@ -2,7 +2,7 @@
 //! 0 control word (rw: 0 stop, 1 run, 4 reset fault), 1 setpoint ×0.01 Hz (rw 0–5000),
 //! 2 ramp time 0–50 Hz ×0.1 s (rw 1–600), 3 output frequency ×0.01 Hz,
 //! 4 status (bit0 running, bit1 at speed, bit3 fault), 5 fault code, 6 motor current ×0.1 A,
-//! 10 unit ID and 11 baud code (rw, see `comm.rs`).
+//! 7 unit ID and 8 baud code (rw, see `comm.rs`).
 //!
 //! A run command while a fault is latched is acknowledged but the drive stays
 //! stopped: "write acknowledged" is not "process reached target".
@@ -39,7 +39,7 @@ impl Vfd {
             running: false,
             fault_code: 0,
             current_a: 0.0,
-            comm: CommRegs::default(),
+            comm: CommRegs::at(7),
         }
     }
 
@@ -118,7 +118,7 @@ impl SimModel for Vfd {
                 0 => matches!(v, 0 | 1 | 4),
                 1 => *v <= 5000,
                 2 => (1..=600).contains(v),
-                a if CommRegs::handles(*a) => CommRegs::check(*a, *v).is_ok(),
+                a if self.comm.handles(*a) => self.comm.check(*a, *v).is_ok(),
                 _ => false,
             };
             if !ok {

@@ -1,13 +1,12 @@
 //! Communication-settings registers shared by the simulated VFD and temperature
 //! controller (simulator design, commissioning-control design §6):
-//! holding 10 = unit ID (1–247), holding 11 = baud code (0 4800, 1 9600, 2 19200, 3 38400).
-//! A write is answered at the old settings; the world applies the change after the reply.
+//! holding `base` = unit ID (1–247), `base + 1` = baud code (0 4800, 1 9600, 2 19200, 3 38400).
+//! The base follows the model's last register (VFD 7, temperature controller 6), so a poll stays one
+//! contiguous read. A write is answered at the old settings; the world applies the change after the reply.
 
 use crate::image::ImageBuilder;
 use buslink_core::protocol::pdu::{ExceptionCode, Table};
 
-pub const UNIT_REGISTER: u16 = 10;
-pub const BAUD_REGISTER: u16 = 11;
 pub const BAUD_CODES: [(u16, u32); 4] = [(0, 4800), (1, 9600), (2, 19_200), (3, 38_400)];
 pub const DEFAULT_BAUD: u32 = 9600;
 
@@ -28,14 +27,17 @@ pub enum CommChange {
 
 #[derive(Clone, Debug)]
 pub struct CommRegs {
+    /// Address of the unit-ID register; the baud code is at `base + 1`.
+    pub base: u16,
     pub unit: u8,
     pub baud: u32,
     pending: Vec<CommChange>,
 }
 
-impl Default for CommRegs {
-    fn default() -> Self {
+impl CommRegs {
+    pub fn at(base: u16) -> Self {
         Self {
+            base,
             unit: 1,
             baud: DEFAULT_BAUD,
             pending: Vec::new(),
@@ -44,25 +46,23 @@ impl Default for CommRegs {
 }
 
 impl CommRegs {
-    pub fn handles(address: u16) -> bool {
-        address == UNIT_REGISTER || address == BAUD_REGISTER
+    pub fn handles(&self, address: u16) -> bool {
+        address == self.base || address == self.base + 1
     }
 
     pub fn image(&self, b: &mut ImageBuilder) {
         let h = Table::HoldingRegister;
-        b.u16(h, UNIT_REGISTER, u16::from(self.unit), true).u16(
-            h,
-            BAUD_REGISTER,
-            code_of(self.baud).unwrap_or(1),
-            true,
-        );
+        b.u16(h, self.base, u16::from(self.unit), true)
+            .u16(h, self.base + 1, code_of(self.baud).unwrap_or(1), true);
     }
 
-    pub fn check(address: u16, value: u16) -> Result<(), ExceptionCode> {
-        let ok = match address {
-            UNIT_REGISTER => (1..=247).contains(&value),
-            BAUD_REGISTER => baud_of(value).is_some(),
-            _ => false,
+    pub fn check(&self, address: u16, value: u16) -> Result<(), ExceptionCode> {
+        let ok = if address == self.base {
+            (1..=247).contains(&value)
+        } else if address == self.base + 1 {
+            baud_of(value).is_some()
+        } else {
+            false
         };
         if ok {
             Ok(())
@@ -73,17 +73,12 @@ impl CommRegs {
 
     /// Queue an already checked value.
     pub fn apply(&mut self, address: u16, value: u16) {
-        match address {
-            UNIT_REGISTER => {
-                if let Ok(u) = u8::try_from(value) {
-                    self.pending.push(CommChange::Unit(u));
-                }
+        if address == self.base {
+            if let Ok(u) = u8::try_from(value) {
+                self.pending.push(CommChange::Unit(u));
             }
-            _ => {
-                if let Some(b) = baud_of(value) {
-                    self.pending.push(CommChange::Baud(b));
-                }
-            }
+        } else if let Some(b) = baud_of(value) {
+            self.pending.push(CommChange::Baud(b));
         }
     }
 
