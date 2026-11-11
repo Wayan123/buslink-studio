@@ -1,0 +1,86 @@
+{
+ "schema_version": 1,
+ "profile_id": "test.soil-8in1",
+ "profile_version": "1.0.0",
+ "vendor": "Test vendor",
+ "model": "Soil 8-in-1",
+ "support_level": "documented",
+ "capabilities": {
+  "read": "documented",
+  "write": "unsupported",
+  "comm_config": "unsupported",
+  "control": "unsupported"
+ },
+ "source": {
+  "document": "Sensor user manual",
+  "revision": "v1.0",
+  "pages": "4-5",
+  "url": "ftp://x",
+  "retrieved": "2026-1-1"
+ },
+ "transport": {
+  "rtu": {
+   "unit_id": 1,
+   "baud": 9600,
+   "data_bits": 8,
+   "parity": "none",
+   "stop_bits": 1
+  }
+ },
+ "registers": [
+  {
+   "id": "temperature",
+   "name": {
+    "en": "Temperature",
+    "id": "Suhu"
+   },
+   "table": "holding_register",
+   "address": 0,
+   "doc_address": "40001",
+   "type": "i16",
+   "scale": 0.1,
+   "unit": "°C",
+   "decimals": 1,
+   "source_page": "p. 5"
+  },
+  {
+   "id": "moisture",
+   "name": {
+    "en": "Moisture",
+    "id": "Kelembapan"
+   },
+   "table": "holding_register",
+   "address": 1,
+   "type": "u16",
+   "scale": 0.1,
+   "unit": "%",
+   "valid_range": [
+    0,
+    100
+   ]
+  },
+  {
+   "id": "energy",
+   "name": "Energy",
+   "table": "input_register",
+   "address": 10,
+   "type": "f32",
+   "word_order": "CDAB",
+   "unit": "kWh"
+  },
+  {
+   "id": "status",
+   "name": "Status",
+   "table": "input_register",
+   "address": 12,
+   "type": "bitfield",
+   "bits": {
+    "0": "Fault",
+    "3": {
+     "en": "Ready",
+     "id": "Siap"
+    }
+   }
+  }
+ ]
+}

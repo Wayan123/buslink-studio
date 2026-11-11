@@ -1,0 +1,103 @@
+{
+  "$schema": "./schema/buslink-profile.schema.json",
+  "schema_version": 1,
+  "profile_id": "bgt.smps-8in1",
+  "profile_version": "1.0.0",
+  "vendor": "Beijing Guoxinhuayuan (BGT)",
+  "model": "BGT-SMPS soil multi-parameter sensor, 8-in-1",
+  "category": "soil sensor",
+  "description": {
+    "en": "Soil temperature, moisture, EC, salinity, N, P, K and pH over Modbus RTU (FC03, holding registers 0-7).",
+    "id": "Suhu, kelembapan, EC, salinitas, N, P, K dan pH tanah melalui Modbus RTU (FC03, holding register 0-7)."
+  },
+  "support_level": "documented",
+  "capabilities": {
+    "read": "documented",
+    "write": "unsupported",
+    "comm_config": "unsupported",
+    "control": "unsupported"
+  },
+  "source": {
+    "document": "Manual for BGT-SMPS Soil Multi-Parameter Sensor",
+    "revision": "2026-04-27 (date in the file name; firmware revision not stated)",
+    "pages": "3-4",
+    "publisher": "Beijing Guoxinhuayuan"
+  },
+  "transport": {
+    "rtu": { "unit_id": 1, "baud": 9600, "data_bits": 8, "parity": "none", "stop_bits": 1, "response_timeout_ms": 1000 },
+    "simulator": { "model": "bgt_smps_8in1" }
+  },
+  "registers": [
+    {
+      "id": "temperature",
+      "name": { "en": "Soil temperature", "id": "Suhu tanah" },
+      "table": "holding_register", "address": 0, "type": "i16", "scale": 0.1, "unit": "°C", "decimals": 1,
+      "valid_range": [-30, 70], "poll": "normal", "source_page": "p. 4 (range p. 3)"
+    },
+    {
+      "id": "moisture",
+      "name": { "en": "Soil moisture", "id": "Kelembapan tanah" },
+      "description": { "en": "Volumetric water content.", "id": "Kadar air volumetrik." },
+      "table": "holding_register", "address": 1, "type": "u16", "scale": 0.1, "unit": "%", "decimals": 1,
+      "poll": "normal", "source_page": "p. 4"
+    },
+    {
+      "id": "ec",
+      "name": { "en": "Electrical conductivity", "id": "Konduktivitas listrik" },
+      "table": "holding_register", "address": 2, "type": "u16", "unit": "µS/cm", "decimals": 0,
+      "poll": "normal", "source_page": "p. 4"
+    },
+    {
+      "id": "salinity",
+      "name": { "en": "Salinity", "id": "Salinitas" },
+      "description": {
+        "en": "Unit as printed in the manual; the manual does not define a conversion to ppm/ppt.",
+        "id": "Satuan sesuai manual; manual tidak menyebut konversi ke ppm/ppt."
+      },
+      "table": "holding_register", "address": 3, "type": "u16", "unit": "µS/cm", "decimals": 0,
+      "poll": "normal", "source_page": "p. 4"
+    },
+    {
+      "id": "nitrogen",
+      "name": { "en": "Nitrogen (N)", "id": "Nitrogen (N)" },
+      "table": "holding_register", "address": 4, "type": "u16", "unit": "mg/kg", "decimals": 0,
+      "poll": "normal", "source_page": "p. 4"
+    },
+    {
+      "id": "phosphorus",
+      "name": { "en": "Phosphorus (P)", "id": "Fosfor (P)" },
+      "table": "holding_register", "address": 5, "type": "u16", "unit": "mg/kg", "decimals": 0,
+      "poll": "normal", "source_page": "p. 4"
+    },
+    {
+      "id": "potassium",
+      "name": { "en": "Potassium (K)", "id": "Kalium (K)" },
+      "table": "holding_register", "address": 6, "type": "u16", "unit": "mg/kg", "decimals": 0,
+      "poll": "normal", "source_page": "p. 4"
+    },
+    {
+      "id": "ph",
+      "name": { "en": "Soil pH", "id": "pH tanah" },
+      "description": {
+        "en": "Resolution 0.01 pH; the manual states accuracy ±1 pH (p. 3).",
+        "id": "Resolusi 0,01 pH; manual menyebut akurasi ±1 pH (hlm. 3)."
+      },
+      "table": "holding_register", "address": 7, "type": "u16", "scale": 0.01, "unit": "pH", "decimals": 2,
+      "poll": "normal", "source_page": "p. 4"
+    }
+  ],
+  "notes": [
+    {
+      "en": "Register map taken from the manual's page 4 request/response example: FC03, start offset 0, quantity 8, defaults unit 1, 9600 8N1. Registers 8 and 9 are undocumented and are not read. The manual prints offsets, not 4xxxx labels, so no doc_address is given.",
+      "id": "Peta register dari contoh request/respons manual halaman 4: FC03, offset awal 0, jumlah 8, default unit 1, 9600 8N1. Register 8 dan 9 tidak terdokumentasi dan tidak dibaca. Manual mencetak offset, bukan label 4xxxx, sehingga doc_address tidak diisi."
+    },
+    {
+      "en": "N, P and K are printed as mg/kg (mg/L) without a conversion basis. Salinity is printed as µS/cm. Values are shown as printed; this profile does not claim calibration.",
+      "id": "N, P dan K tertulis mg/kg (mg/L) tanpa dasar konversi. Salinitas tertulis µS/cm. Nilai ditampilkan sesuai manual; profil ini tidak mengklaim kalibrasi."
+    },
+    {
+      "en": "Support level stays 'documented' until a BusLink hardware test (adapter, platform, record) is recorded in evidence.hardware.",
+      "id": "Tingkat dukungan tetap 'documented' sampai uji perangkat keras BusLink (adapter, platform, rekaman) dicatat di evidence.hardware."
+    }
+  ]
+}

@@ -1,0 +1,107 @@
+{
+ "schema_version": 1,
+ "profile_id": "sim.vfd-basic",
+ "profile_version": "0.1.0",
+ "vendor": "BusLink simulator",
+ "model": "Simulated VFD",
+ "support_level": "simulated",
+ "simulated_only": true,
+ "capabilities": {
+  "read": "simulated",
+  "write": "simulated",
+  "control": "simulated"
+ },
+ "transport": {
+  "simulator": {
+   "model": "vfd_basic"
+  },
+  "tcp": {
+   "unit_id": 1,
+   "port": 1502
+  }
+ },
+ "registers": [
+  {
+   "id": "control_word",
+   "name": "Control word",
+   "table": "holding_register",
+   "address": 0,
+   "type": "u16",
+   "access": "read_write",
+   "write": {
+    "allowed_values": [
+     0,
+     1
+    ],
+    "risk": "high",
+    "role": "operator"
+   }
+  },
+  {
+   "id": "freq_ref",
+   "name": "Frequency reference",
+   "table": "holding_register",
+   "address": 1,
+   "type": "u16",
+   "scale": 0.1,
+   "unit": "Hz",
+   "valid_range": [
+    0,
+    60
+   ],
+   "access": "read_write",
+   "write": {
+    "min": 0,
+    "max": 50,
+    "step": 0,
+    "risk": "medium",
+    "role": "operator"
+   }
+  },
+  {
+   "id": "status_word",
+   "name": "Status word",
+   "table": "input_register",
+   "address": 0,
+   "type": "bitfield"
+  },
+  {
+   "id": "freq_out",
+   "name": "Output frequency",
+   "table": "input_register",
+   "address": 1,
+   "type": "u16",
+   "scale": 0.1,
+   "unit": "Hz"
+  }
+ ],
+ "commands": [
+  {
+   "id": "run",
+   "kind": "run",
+   "label": {
+    "en": "Run",
+    "id": "Jalan"
+   },
+   "register": "control_word",
+   "value": 1,
+   "readback_register": "status_word",
+   "timeout_ms": 2000
+  },
+  {
+   "id": "stop",
+   "kind": "stop",
+   "label": "Software stop. Not an emergency stop.",
+   "register": "control_word",
+   "value": 0,
+   "readback_register": "status_word"
+  },
+  {
+   "id": "set_freq",
+   "kind": "setpoint",
+   "label": "Apply frequency",
+   "register": "freq_ref",
+   "readback_register": "freq_ref"
+  }
+ ]
+}

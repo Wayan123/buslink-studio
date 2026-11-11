@@ -1,0 +1,64 @@
+{
+  "$schema": "./schema/buslink-profile.schema.json",
+  "schema_version": 1,
+  "profile_id": "sim.energy-meter-basic",
+  "profile_version": "1.0.0",
+  "vendor": "BusLink simulator",
+  "model": { "en": "Simulated energy meter", "id": "Meter energi simulasi" },
+  "category": "simulated device",
+  "description": {
+    "en": "Simulated device. Single-phase meter with float values (ABCD) and energy counters, for practising word order. It is not a real meter mapping.",
+    "id": "Perangkat simulasi. Meter satu fasa dengan nilai float (ABCD) dan penghitung energi, untuk latihan word order. Bukan pemetaan meter nyata."
+  },
+  "support_level": "simulated",
+  "simulated_only": true,
+  "capabilities": { "read": "simulated", "write": "unsupported", "comm_config": "unsupported", "control": "unsupported" },
+  "transport": {
+    "simulator": { "model": "energy_meter_basic" },
+    "rtu": { "unit_id": 4, "baud": 9600, "data_bits": 8, "parity": "none", "stop_bits": 1 },
+    "tcp": { "unit_id": 4, "port": 1502 }
+  },
+  "registers": [
+    {
+      "id": "voltage", "name": { "en": "Voltage L-N", "id": "Tegangan L-N" },
+      "table": "input_register", "address": 0, "type": "f32", "word_order": "ABCD", "unit": "V", "decimals": 1,
+      "valid_range": [0, 500]
+    },
+    {
+      "id": "current", "name": { "en": "Current", "id": "Arus" },
+      "table": "input_register", "address": 2, "type": "f32", "word_order": "ABCD", "unit": "A", "decimals": 2,
+      "valid_range": [0, 100]
+    },
+    {
+      "id": "active_power", "name": { "en": "Active power", "id": "Daya aktif" },
+      "table": "input_register", "address": 4, "type": "f32", "word_order": "ABCD", "unit": "W", "decimals": 0,
+      "valid_range": [-50000, 50000]
+    },
+    {
+      "id": "power_factor", "name": { "en": "Power factor", "id": "Faktor daya" },
+      "table": "input_register", "address": 6, "type": "f32", "word_order": "ABCD", "unit": "", "decimals": 3,
+      "valid_range": [-1, 1]
+    },
+    {
+      "id": "frequency", "name": { "en": "Frequency", "id": "Frekuensi" },
+      "table": "input_register", "address": 8, "type": "f32", "word_order": "ABCD", "unit": "Hz", "decimals": 2,
+      "valid_range": [45, 65]
+    },
+    {
+      "id": "energy_kwh", "name": { "en": "Active energy", "id": "Energi aktif" },
+      "table": "input_register", "address": 10, "type": "u32", "word_order": "ABCD", "scale": 0.01, "unit": "kWh",
+      "decimals": 2, "poll": "slow"
+    },
+    {
+      "id": "energy_wh_total", "name": { "en": "Active energy (64-bit counter)", "id": "Energi aktif (penghitung 64-bit)" },
+      "table": "input_register", "address": 12, "type": "u64", "word_order": "ABCD", "unit": "Wh", "decimals": 0,
+      "poll": "slow"
+    }
+  ],
+  "notes": [
+    {
+      "en": "Simulated device: exists only in the BusLink simulator. The 'wrong word order' fault serves the float and counter registers word-swapped (CDAB).",
+      "id": "Perangkat simulasi: hanya ada di simulator BusLink. Fault 'word order salah' menyajikan register float dan penghitung dengan word tertukar (CDAB)."
+    }
+  ]
+}

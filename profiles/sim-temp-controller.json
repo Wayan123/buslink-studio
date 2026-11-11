@@ -1,0 +1,92 @@
+{
+  "$schema": "./schema/buslink-profile.schema.json",
+  "schema_version": 1,
+  "profile_id": "sim.temp-controller-basic",
+  "profile_version": "1.0.0",
+  "vendor": "BusLink simulator",
+  "model": { "en": "Simulated temperature controller", "id": "Pengendali suhu simulasi" },
+  "category": "simulated device",
+  "description": {
+    "en": "Simulated device. A heater with a first-order thermal lag and a PI loop for training. It is not a real controller mapping.",
+    "id": "Perangkat simulasi. Pemanas dengan lag termal orde satu dan loop PI untuk pelatihan. Bukan pemetaan pengendali nyata."
+  },
+  "support_level": "simulated",
+  "simulated_only": true,
+  "capabilities": { "read": "simulated", "write": "simulated", "comm_config": "unsupported", "control": "simulated" },
+  "transport": {
+    "simulator": { "model": "temp_controller_basic" },
+    "rtu": { "unit_id": 3, "baud": 9600, "data_bits": 8, "parity": "none", "stop_bits": 1 },
+    "tcp": { "unit_id": 3, "port": 1502 }
+  },
+  "registers": [
+    {
+      "id": "pv",
+      "name": { "en": "Process temperature (PV)", "id": "Suhu proses (PV)" },
+      "table": "holding_register", "address": 0, "type": "i16", "scale": 0.1, "unit": "°C", "decimals": 1,
+      "valid_range": [-50, 300], "poll": "fast"
+    },
+    {
+      "id": "sp",
+      "name": { "en": "Setpoint (SP)", "id": "Setpoint (SP)" },
+      "table": "holding_register", "address": 1, "type": "i16", "scale": 0.1, "unit": "°C", "decimals": 1,
+      "valid_range": [0, 120], "access": "read_write",
+      "write": { "min": 0, "max": 120, "step": 0.1, "risk": "medium", "role": "operator" }
+    },
+    {
+      "id": "output",
+      "name": { "en": "Heater output", "id": "Keluaran pemanas" },
+      "table": "holding_register", "address": 2, "type": "u16", "scale": 0.1, "unit": "%", "decimals": 1,
+      "valid_range": [0, 100], "poll": "fast"
+    },
+    {
+      "id": "mode",
+      "name": { "en": "Mode", "id": "Mode" },
+      "description": { "en": "0 = auto (PI), 1 = manual output.", "id": "0 = otomatis (PI), 1 = keluaran manual." },
+      "table": "holding_register", "address": 3, "type": "u16", "access": "read_write",
+      "write": { "allowed_values": [0, 1], "risk": "medium", "role": "operator" }
+    },
+    {
+      "id": "manual_output",
+      "name": { "en": "Manual output", "id": "Keluaran manual" },
+      "table": "holding_register", "address": 4, "type": "u16", "scale": 0.1, "unit": "%", "decimals": 1,
+      "valid_range": [0, 100], "access": "read_write",
+      "write": { "min": 0, "max": 100, "step": 0.1, "risk": "high", "role": "operator" }
+    },
+    {
+      "id": "heater_enable",
+      "name": { "en": "Heater enable", "id": "Pemanas aktif" },
+      "description": { "en": "0 = off, 1 = on.", "id": "0 = mati, 1 = hidup." },
+      "table": "holding_register", "address": 5, "type": "u16", "access": "read_write",
+      "write": { "allowed_values": [0, 1], "risk": "high", "role": "operator" }
+    }
+  ],
+  "commands": [
+    {
+      "id": "set_temperature", "kind": "setpoint", "label": { "en": "Apply temperature setpoint", "id": "Terapkan setpoint suhu" },
+      "register": "sp", "readback_register": "sp"
+    },
+    {
+      "id": "heater_on", "kind": "run", "label": { "en": "Enable heater", "id": "Hidupkan pemanas" },
+      "register": "heater_enable", "value": 1, "readback_register": "heater_enable"
+    },
+    {
+      "id": "heater_off", "kind": "stop",
+      "label": { "en": "Software stop. Not an emergency stop.", "id": "Stop perangkat lunak. Bukan tombol darurat." },
+      "register": "heater_enable", "value": 0, "readback_register": "heater_enable"
+    },
+    {
+      "id": "mode_auto", "kind": "mode", "label": { "en": "Switch to auto", "id": "Ubah ke otomatis" },
+      "register": "mode", "value": 0, "readback_register": "mode"
+    },
+    {
+      "id": "mode_manual", "kind": "mode", "label": { "en": "Switch to manual", "id": "Ubah ke manual" },
+      "register": "mode", "value": 1, "readback_register": "mode"
+    }
+  ],
+  "notes": [
+    {
+      "en": "Simulated device: exists only in the BusLink simulator. Time constant 60 s, gain 150 °C at 100 % output, ambient 25 °C.",
+      "id": "Perangkat simulasi: hanya ada di simulator BusLink. Konstanta waktu 60 s, gain 150 °C pada keluaran 100 %, suhu ruang 25 °C."
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "$schema": "./schema/buslink-profile.schema.json",
+  "schema_version": 1,
+  "profile_id": "generic.holding-template",
+  "profile_version": "1.0.0",
+  "vendor": { "en": "Generic (no vendor)", "id": "Generik (tanpa vendor)" },
+  "model": { "en": "Holding register template", "id": "Templat holding register" },
+  "category": "template",
+  "description": {
+    "en": "Starting point for a custom device: four holding-register tags at offsets 0-5. Change addresses, types, word order and scaling to match the device manual. No identification claim.",
+    "id": "Titik awal untuk perangkat kustom: empat tag holding register pada offset 0-5. Ubah alamat, tipe, word order dan skala sesuai manual perangkat. Tidak ada klaim identifikasi."
+  },
+  "support_level": "generic",
+  "capabilities": { "read": "generic", "write": "unsupported", "comm_config": "unsupported", "control": "unsupported" },
+  "transport": {
+    "rtu": { "unit_id": 1, "baud": 9600, "data_bits": 8, "parity": "none", "stop_bits": 1 },
+    "tcp": { "unit_id": 1, "port": 502 }
+  },
+  "registers": [
+    {
+      "id": "hr0_u16", "name": { "en": "Holding register 0 (u16)", "id": "Holding register 0 (u16)" },
+      "table": "holding_register", "address": 0, "type": "u16"
+    },
+    {
+      "id": "hr1_i16", "name": { "en": "Holding register 1 (i16)", "id": "Holding register 1 (i16)" },
+      "table": "holding_register", "address": 1, "type": "i16"
+    },
+    {
+      "id": "hr2_u32", "name": { "en": "Holding registers 2-3 (u32)", "id": "Holding register 2-3 (u32)" },
+      "table": "holding_register", "address": 2, "type": "u32", "word_order": "ABCD"
+    },
+    {
+      "id": "hr4_f32", "name": { "en": "Holding registers 4-5 (f32)", "id": "Holding register 4-5 (f32)" },
+      "table": "holding_register", "address": 4, "type": "f32", "word_order": "ABCD"
+    }
+  ],
+  "notes": [
+    {
+      "en": "Generic template: the word order ABCD is a placeholder, not a fact about any device. Use the register inspector (all four orders side by side) and the manual to pick the right one.",
+      "id": "Templat generik: word order ABCD hanya pengisi, bukan fakta perangkat. Gunakan register inspector (keempat urutan berdampingan) dan manual untuk memilih yang benar."
+    }
+  ]
+}

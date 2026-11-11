@@ -1,0 +1,29 @@
+{
+ "schema_version": 1,
+ "profile_id": "test.soil-8in1",
+ "profile_version": "1.0.0",
+ "vendor": "Test vendor",
+ "model": "Soil 8-in-1",
+ "support_level": "documented",
+ "capabilities": {
+  "read": "documented",
+  "write": "unsupported",
+  "comm_config": "unsupported",
+  "control": "unsupported"
+ },
+ "source": {
+  "document": "Sensor user manual",
+  "revision": "v1.0",
+  "pages": "4-5"
+ },
+ "transport": {
+  "rtu": {
+   "unit_id": 1,
+   "baud": 9600,
+   "data_bits": 8,
+   "parity": "none",
+   "stop_bits": 1
+  }
+ },
+ "registers": []
+}

@@ -14,6 +14,7 @@ A path outside profiles/ or a non-.json file is skipped with exit 0.
 """
 from __future__ import annotations
 
+import copy
 import json
 import pathlib
 import re
@@ -36,11 +37,18 @@ APPLY = ("immediate", "after_reboot", "unknown")
 MAX_REGS_PER_READ = 125     # FC03/04 limit
 MAX_BITS_PER_READ = 2000    # FC01/02 limit
 
-ID_RX = re.compile(r"^[a-z][a-z0-9_]{0,47}$")
-PROFILE_ID_RX = re.compile(r"^[a-z0-9]+(?:[._-][a-z0-9]+)*$")
-SEMVER_RX = re.compile(r"^\d+\.\d+\.\d+$")
-DATE_RX = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# All patterns are ASCII-only and used with fullmatch(), so a trailing newline
+# or a non-ASCII digit never passes (the Rust validator in
+# crates/buslink-core/src/profile/validate.rs implements the same rules).
+ID_RX = re.compile(r"[a-z][a-z0-9_]{0,47}", re.ASCII)
+PROFILE_ID_RX = re.compile(r"[a-z0-9]+(?:[._-][a-z0-9]+)*", re.ASCII)
+SEMVER_RX = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+", re.ASCII)
+DATE_RX = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", re.ASCII)
+BIT_RX = re.compile(r"0|[1-9][0-9]?", re.ASCII)
+DIGITS_RX = re.compile(r"[0-9]+", re.ASCII)
+URL_RX = re.compile(r"https?://\S+")
 CONTROL_RX = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+INT_MIN, INT_MAX = -(2 ** 63), 2 ** 64 - 1  # JSON integers outside this range are rejected
 
 TOP_KEYS = {"$schema", "$comment", "schema_version", "profile_id", "profile_version", "vendor", "model",
             "category", "firmware", "description", "support_level", "capabilities", "simulated_only",
@@ -81,11 +89,22 @@ def _no_dupes(pairs):
 
 
 def is_int(v) -> bool:
-    return isinstance(v, int) and not isinstance(v, bool)
+    return isinstance(v, int) and not isinstance(v, bool) and INT_MIN <= v <= INT_MAX
 
 
 def is_num(v) -> bool:
-    return (isinstance(v, (int, float)) and not isinstance(v, bool)) and v == v and v not in (float("inf"), float("-inf"))
+    if isinstance(v, float):
+        return v == v and v not in (float("inf"), float("-inf"))
+    return is_int(v)
+
+
+def same(a, b) -> bool:
+    """Equal and of the same JSON type: 8.0 is not 8 and true is not 1."""
+    return type(a) is type(b) and a == b
+
+
+def matches(rx: re.Pattern, v) -> bool:
+    return isinstance(v, str) and rx.fullmatch(v) is not None
 
 
 def keys(r: Report, path: str, obj: dict, allowed: set[str]) -> None:
@@ -94,18 +113,18 @@ def keys(r: Report, path: str, obj: dict, allowed: set[str]) -> None:
             r.err(f"{path}.{k}", "unknown key (profiles are strict data; no scripts or expressions)")
 
 
-def text(r: Report, path: str, v, *, max_len: int = 200, required: bool = True) -> None:
+def text(r: Report, path: str, v, *, max_len: int = 200, required: bool = True, bilingual: bool = True) -> None:
     if v is None:
         if required:
             r.err(path, "required")
         return
-    if isinstance(v, dict):  # bilingual {"en": ..., "id": ...}
+    if isinstance(v, dict) and bilingual:  # {"en": ..., "id": ...}; the values are plain strings
         keys(r, path, v, {"en", "id"})
         for lang in ("en", "id"):
             if lang not in v:
                 r.err(f"{path}.{lang}", "required when the text is bilingual")
         for lang, s in v.items():
-            text(r, f"{path}.{lang}", s, max_len=max_len)
+            text(r, f"{path}.{lang}", s, max_len=max_len, bilingual=False)
         return
     if not isinstance(v, str) or not v.strip():
         r.err(path, "must be a non-empty string or {\"en\", \"id\"}")
@@ -123,7 +142,7 @@ def enum(r: Report, path: str, v, allowed, required: bool = True) -> bool:
         if required:
             r.err(path, f"required, one of {list(allowed)}")
         return False
-    if v not in allowed:
+    if not any(same(v, a) for a in allowed):
         r.err(path, f"'{v}' is not one of {list(allowed)}")
         return False
     return True
@@ -148,11 +167,13 @@ def check_source(r: Report, path: str, src) -> None:
     text(r, f"{path}.document", src.get("document"))
     text(r, f"{path}.revision", src.get("revision"), max_len=80)
     url = src.get("url")
-    if url is not None and (not isinstance(url, str) or not re.match(r"^https?://\S+$", url)):
+    if url is not None and not matches(URL_RX, url):
         r.err(f"{path}.url", "must be an http(s) URL")
     if src.get("pages") is not None:
         text(r, f"{path}.pages", src.get("pages"), max_len=80)
-    if src.get("retrieved") is not None and not (isinstance(src["retrieved"], str) and DATE_RX.match(src["retrieved"])):
+    if src.get("publisher") is not None:
+        text(r, f"{path}.publisher", src.get("publisher"), max_len=120)
+    if src.get("retrieved") is not None and not matches(DATE_RX, src["retrieved"]):
         r.err(f"{path}.retrieved", "must be YYYY-MM-DD")
 
 
@@ -190,8 +211,7 @@ def check_transport(r: Report, path: str, t) -> None:
             int_range(r, f"{p}.port", tcp.get("port"), 1, 65535)
             int_range(r, f"{p}.response_timeout_ms", tcp.get("response_timeout_ms"), 50, 10_000, required=False)
     sim = t.get("simulator")
-    if sim is not None and not (isinstance(sim, dict) and set(sim) <= {"model"} and isinstance(sim.get("model"), str)
-                                and ID_RX.match(sim["model"])):
+    if sim is not None and not (isinstance(sim, dict) and set(sim) <= {"model"} and matches(ID_RX, sim.get("model"))):
         r.err(f"{path}.simulator", "must be {\"model\": \"<simulator id>\"}")
 
 
@@ -201,7 +221,7 @@ def check_register(r: Report, path: str, reg, ids: set[str]) -> dict | None:
         return None
     keys(r, path, reg, REG_KEYS)
     rid = reg.get("id")
-    if not isinstance(rid, str) or not ID_RX.match(rid):
+    if not matches(ID_RX, rid):
         r.err(f"{path}.id", "must match ^[a-z][a-z0-9_]{0,47}$")
     elif rid in ids:
         r.err(f"{path}.id", f"duplicate register id '{rid}'")
@@ -245,7 +265,7 @@ def check_register(r: Report, path: str, reg, ids: set[str]) -> dict | None:
     bits = reg.get("bits")
     if bits is not None and isinstance(bits, dict):
         for b, label in bits.items():
-            if not (isinstance(b, str) and b.isdigit() and 0 <= int(b) <= 15):
+            if not (matches(BIT_RX, b) and int(b) <= 15):
                 r.err(f"{path}.bits.{b}", "bit index must be \"0\"..\"15\"")
             text(r, f"{path}.bits.{b}", label, max_len=80)
     elif bits is not None:
@@ -310,7 +330,8 @@ def check_register(r: Report, path: str, reg, ids: set[str]) -> dict | None:
         r.err(f"{path}.write", "only allowed when access is 'read_write'")
     if width is None or not table_ok or not addr_ok:
         return None
-    return {"id": rid, "table": table, "start": reg["address"], "end": reg["address"] + width - 1,
+    return {"id": rid if matches(ID_RX, rid) else None, "table": table, "start": reg["address"],
+            "end": reg["address"] + width - 1,
             "writable": access == "read_write"}
 
 
@@ -346,10 +367,14 @@ def check_hardware_evidence(r: Report, ev) -> int:
             r.err(p, "must be an object")
             continue
         keys(r, p, e, HW_KEYS)
-        if not (isinstance(e.get("date"), str) and DATE_RX.match(e["date"])):
+        if not matches(DATE_RX, e.get("date")):
             r.err(f"{p}.date", "required, YYYY-MM-DD")
         for k in ("adapter", "platform", "record"):
             text(r, f"{p}.{k}", e.get(k), max_len=200)
+        if e.get("firmware") is not None:
+            text(r, f"{p}.firmware", e.get("firmware"), max_len=80)
+        if e.get("notes") is not None:
+            text(r, f"{p}.notes", e.get("notes"), max_len=2000)
         if e.get("unit_id") is not None:
             int_range(r, f"{p}.unit_id", e.get("unit_id"), 1, 255)
         if enum(r, f"{p}.result", e.get("result"), ("pass", "fail", "partial")) and e["result"] == "pass":
@@ -357,22 +382,42 @@ def check_hardware_evidence(r: Report, ev) -> int:
     return passing
 
 
+def strip_nulls(r: Report, obj, path: str = "") -> None:
+    """null is never a value in a profile: report it and treat the key as absent."""
+    if isinstance(obj, dict):
+        for k in list(obj):
+            p = f"{path}.{k}" if path else k
+            if obj[k] is None:
+                r.err(p, "null is not allowed; omit the key")
+                del obj[k]
+            else:
+                strip_nulls(r, obj[k], p)
+    elif isinstance(obj, list):
+        for i, v in enumerate(obj):
+            strip_nulls(r, v, f"{path}[{i}]")
+
+
 def validate(doc) -> Report:
     r = Report()
     if not isinstance(doc, dict):
         r.err("$", "profile must be a JSON object")
         return r
+    doc = copy.deepcopy(doc)
+    strip_nulls(r, doc)
     keys(r, "$", doc, TOP_KEYS)
+    for k in ("$schema", "$comment"):
+        if k in doc and not (isinstance(doc[k], str) and len(doc[k]) <= 2000):
+            r.err(k, "must be a string")
     for k in REQUIRED_TOP:
         if k not in doc:
             r.err(k, "required")
-    if "schema_version" in doc and doc["schema_version"] != 1:
+    if "schema_version" in doc and not same(doc["schema_version"], 1):
         r.err("schema_version", "this validator understands schema_version 1 only")
     pid = doc.get("profile_id")
-    if pid is not None and not (isinstance(pid, str) and 3 <= len(pid) <= 64 and PROFILE_ID_RX.match(pid)):
+    if pid is not None and not (matches(PROFILE_ID_RX, pid) and 3 <= len(pid) <= 64):
         r.err("profile_id", "must be 3-64 chars of a-z, 0-9 separated by . _ -")
     pv = doc.get("profile_version")
-    if pv is not None and not (isinstance(pv, str) and SEMVER_RX.match(pv)):
+    if pv is not None and not matches(SEMVER_RX, pv):
         r.err("profile_version", "must be MAJOR.MINOR.PATCH")
     for k in ("vendor", "model"):
         if k in doc:
@@ -434,7 +479,11 @@ def validate(doc) -> Report:
                 span = check_register(r, f"registers[{i}]", reg, ids)
                 if span:
                     spans.append(span)
-    by_id = {s["id"]: s for s in spans}
+    by_id = {s["id"]: s for s in spans if s["id"] is not None}
+
+    def lookup(name):
+        return by_id.get(name) if isinstance(name, str) else None
+
     spans.sort(key=lambda s: (s["table"], s["start"]))
     for a, b in zip(spans, spans[1:]):
         if a["table"] == b["table"] and b["start"] <= a["end"]:
@@ -461,24 +510,26 @@ def validate(doc) -> Report:
                     continue
                 keys(r, p, c, CMD_KEYS)
                 cid = c.get("id")
-                if not isinstance(cid, str) or not ID_RX.match(cid) or cid in seen:
+                if not matches(ID_RX, cid) or cid in seen:
                     r.err(f"{p}.id", "must be a unique id matching ^[a-z][a-z0-9_]{0,47}$")
                 else:
                     seen.add(cid)
                 kind = c.get("kind")
                 enum(r, f"{p}.kind", kind, COMMAND_KINDS)
                 text(r, f"{p}.label", c.get("label"), max_len=80)
-                reg = by_id.get(c.get("register"))
+                reg = lookup(c.get("register"))
                 if reg is None or not reg["writable"]:
                     r.err(f"{p}.register", "must name a read_write register of this profile")
                 rb = c.get("readback_register")
-                if rb not in by_id:
+                if lookup(rb) is None:
                     r.err(f"{p}.readback_register", "required; must name a register of this profile")
                 if kind == "setpoint":
                     if c.get("value") is not None:
                         r.err(f"{p}.value", "setpoint values come from the operator, bounded by the register's write limits")
                 elif kind in COMMAND_KINDS and not is_num(c.get("value")):
                     r.err(f"{p}.value", "fixed commands need a numeric value")
+                if c.get("expected") is not None and not is_num(c.get("expected")):
+                    r.err(f"{p}.expected", "must be a number (engineering units of the readback register)")
                 int_range(r, f"{p}.timeout_ms", c.get("timeout_ms"), 100, 30_000, required=False)
 
     cc = doc.get("comm_config")
@@ -495,14 +546,14 @@ def validate(doc) -> Report:
                     r.err(p, "must be an object")
                     continue
                 keys(r, p, v, {"register", "apply", "codes"})
-                reg = by_id.get(v.get("register"))
+                reg = lookup(v.get("register"))
                 if reg is None or not reg["writable"]:
                     r.err(f"{p}.register", "must name a read_write register of this profile")
                 enum(r, f"{p}.apply", v.get("apply"), APPLY)
                 if k == "baud":
                     codes = v.get("codes")
                     if not (isinstance(codes, dict) and codes and all(
-                            isinstance(code, str) and code.isdigit() and is_int(b) and 300 <= b <= 3_000_000
+                            matches(DIGITS_RX, code) and is_int(b) and 300 <= b <= 3_000_000
                             for code, b in codes.items())):
                         r.err(f"{p}.codes", "required: {\"<raw code>\": <baud>, ...}")
                 elif v.get("codes") is not None:
@@ -510,11 +561,15 @@ def validate(doc) -> Report:
     return r
 
 
+def _no_constants(name):
+    raise ValueError(f"'{name}' is not valid JSON")
+
+
 def load(path: pathlib.Path):
     data = path.read_bytes()
     if len(data) > MAX_BYTES:
         raise ValueError(f"file is larger than {MAX_BYTES} bytes")
-    return json.loads(data.decode("utf-8"), object_pairs_hook=_no_dupes)
+    return json.loads(data.decode("utf-8"), object_pairs_hook=_no_dupes, parse_constant=_no_constants)
 
 
 def path_from_stdin() -> str | None:
@@ -546,12 +601,14 @@ def in_profiles(p: pathlib.Path) -> bool:
     except ValueError:
         rel = p
     parts = pathlib.PurePath(rel).parts
-    return p.suffix.lower() == ".json" and "profiles" in parts[:1]
+    # profiles/schema/ holds the JSON Schema itself, not a profile.
+    return p.suffix.lower() == ".json" and "profiles" in parts[:1] and parts[1:2] != ("schema",)
 
 
 def main(argv: list[str]) -> int:
     any_path = "--any-path" in argv  # validate files outside profiles/ (self-tests, drafts)
-    args = [a for a in argv if a and a != "--any-path" and "{{" not in a]  # unsubstituted {{filePath}} -> stdin
+    as_json = "--json" in argv      # one JSON object per file (used by the Rust agreement test)
+    args = [a for a in argv if a and a not in ("--any-path", "--json") and "{{" not in a]  # {{filePath}} -> stdin
     if not args:
         p = path_from_stdin()
         if p is None:
@@ -570,11 +627,20 @@ def main(argv: list[str]) -> int:
             doc = load(p)
         except FileNotFoundError:
             continue  # deleted between save and hook run
-        except (ValueError, UnicodeDecodeError) as e:
-            print(f"INVALID {shown}: not valid JSON ({e})")
+        except (ValueError, UnicodeDecodeError, RecursionError) as e:
+            if as_json:
+                print(json.dumps({"file": shown, "valid": False, "errors": [f"$: not valid JSON ({e})"],
+                                  "warnings": []}))
+            else:
+                print(f"INVALID {shown}: not valid JSON ({e})")
             status = 1
             continue
         rep = validate(doc)
+        if as_json:
+            print(json.dumps({"file": shown, "valid": not rep.errors, "errors": rep.errors,
+                              "warnings": rep.warnings}, ensure_ascii=False))
+            status |= 1 if rep.errors else 0
+            continue
         for w in rep.warnings:
             print(f"warning {shown}: {w}")
         if rep.errors:

@@ -193,11 +193,62 @@ class Invalid(unittest.TestCase):
     def test_bilingual_name_needs_both(self):
         self.assertError(mutate(SENSOR, lambda d: d["registers"][0].update(name={"en": "Temperature"})), ".id")
 
+    # Rules aligned with crates/buslink-core/src/profile/validate.rs
+    def test_enum_is_type_strict(self):
+        self.assertError(mutate(SENSOR, lambda d: d["transport"]["rtu"].update(data_bits=8.0)), "data_bits")
+        self.assertError(mutate(SENSOR, lambda d: d["transport"]["rtu"].update(stop_bits=True)), "stop_bits")
+        self.assertError(mutate(SENSOR, lambda d: d.update(schema_version=True)), "schema_version")
+
+    def test_patterns_are_full_ascii_matches(self):
+        self.assertError(mutate(SENSOR, lambda d: d.update(profile_version="1.0.0\n")), "profile_version")
+        self.assertError(mutate(SENSOR, lambda d: d.update(profile_version="\u0661.0.0")), "profile_version")
+        self.assertError(mutate(SENSOR, lambda d: d["registers"][3].update(bits={"\u00b2": "x"})), "bits")
+
+    def test_null_is_rejected(self):
+        self.assertError(mutate(SENSOR, lambda d: d["registers"][0].update(scale=None)), "null is not allowed")
+
+    def test_non_string_references_do_not_crash(self):
+        d = mutate(VFD, lambda d: d["commands"][0].update(register=["control_word"], readback_register={"a": 1}))
+        self.assertError(d, "commands[0].register")
+        self.assertError(mutate(VFD, lambda d: d["registers"][0].update(id=["x"])), "registers[0].id")
+
+    def test_expected_must_be_number(self):
+        self.assertError(mutate(VFD, lambda d: d["commands"][0].update(expected="1")), "expected")
+
 
 class Cli(unittest.TestCase):
     def run_cli(self, *args, stdin=""):
         return subprocess.run([sys.executable, str(SCRIPT), *args], input=stdin, capture_output=True, text=True,
                               cwd=ROOT)
+
+    def test_json_output(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            f = pathlib.Path(tmp, "x.json")
+            f.write_text(json.dumps(mutate(SENSOR, lambda d: d.pop("profile_id"))), encoding="utf-8")
+            p = self.run_cli("--any-path", "--json", str(f))
+            self.assertEqual(p.returncode, 1)
+            out = json.loads(p.stdout.strip())
+            self.assertFalse(out["valid"])
+            self.assertIn("profile_id: required", out["errors"])
+
+    def test_nan_rejected(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            f = pathlib.Path(tmp, "nan.json")
+            f.write_text('{"schema_version": NaN}', encoding="utf-8")
+            p = self.run_cli("--any-path", str(f))
+            self.assertEqual(p.returncode, 1)
+            self.assertIn("not valid JSON", p.stdout)
+
+    def test_schema_dir_is_skipped(self):
+        p = self.run_cli(str(ROOT / "profiles" / "schema" / "buslink-profile.schema.json"))
+        self.assertEqual(p.returncode, 0)
+        self.assertEqual(p.stdout, "")
+
+    def test_bundled_profiles_are_valid(self):
+        files = sorted(str(p) for p in (ROOT / "profiles").glob("*.json"))
+        if files:
+            p = self.run_cli(*files)
+            self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
 
     def test_cli_valid_and_invalid(self):
         with tempfile.TemporaryDirectory() as tmp:

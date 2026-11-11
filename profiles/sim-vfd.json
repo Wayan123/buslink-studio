@@ -1,0 +1,97 @@
+{
+  "$schema": "./schema/buslink-profile.schema.json",
+  "schema_version": 1,
+  "profile_id": "sim.vfd-basic",
+  "profile_version": "1.0.0",
+  "vendor": "BusLink simulator",
+  "model": { "en": "Simulated VFD", "id": "VFD simulasi" },
+  "category": "simulated device",
+  "description": {
+    "en": "Simulated device. A basic variable frequency drive model for training: run/stop, frequency setpoint, ramp and fault latch. It is not a real drive mapping.",
+    "id": "Perangkat simulasi. Model VFD sederhana untuk pelatihan: jalan/stop, setpoint frekuensi, ramp dan fault latch. Bukan pemetaan drive nyata."
+  },
+  "support_level": "simulated",
+  "simulated_only": true,
+  "capabilities": { "read": "simulated", "write": "simulated", "comm_config": "unsupported", "control": "simulated" },
+  "transport": {
+    "simulator": { "model": "vfd_basic" },
+    "rtu": { "unit_id": 2, "baud": 9600, "data_bits": 8, "parity": "none", "stop_bits": 1 },
+    "tcp": { "unit_id": 2, "port": 1502 }
+  },
+  "registers": [
+    {
+      "id": "control_word",
+      "name": { "en": "Control word", "id": "Control word" },
+      "description": { "en": "0 = stop, 1 = run, 4 = reset fault (only while stopped).", "id": "0 = stop, 1 = jalan, 4 = reset fault (hanya saat berhenti)." },
+      "table": "holding_register", "address": 0, "type": "u16", "access": "read_write",
+      "write": { "allowed_values": [0, 1, 4], "risk": "high", "role": "operator" }
+    },
+    {
+      "id": "freq_setpoint",
+      "name": { "en": "Frequency setpoint", "id": "Setpoint frekuensi" },
+      "table": "holding_register", "address": 1, "type": "u16", "scale": 0.01, "unit": "Hz", "decimals": 2,
+      "valid_range": [0, 50], "access": "read_write",
+      "write": { "min": 0, "max": 50, "step": 0.01, "risk": "medium", "role": "operator" }
+    },
+    {
+      "id": "ramp_time",
+      "name": { "en": "Ramp time 0-50 Hz", "id": "Waktu ramp 0-50 Hz" },
+      "table": "holding_register", "address": 2, "type": "u16", "scale": 0.1, "unit": "s", "decimals": 1,
+      "valid_range": [0.1, 60], "access": "read_write",
+      "write": { "min": 0.1, "max": 60, "step": 0.1, "risk": "low", "role": "commissioner" }
+    },
+    {
+      "id": "output_freq",
+      "name": { "en": "Output frequency", "id": "Frekuensi keluaran" },
+      "table": "holding_register", "address": 3, "type": "u16", "scale": 0.01, "unit": "Hz", "decimals": 2,
+      "valid_range": [0, 50], "poll": "fast"
+    },
+    {
+      "id": "status_word",
+      "name": { "en": "Status word", "id": "Status word" },
+      "table": "holding_register", "address": 4, "type": "bitfield",
+      "bits": {
+        "0": { "en": "Running", "id": "Berjalan" },
+        "1": { "en": "At speed", "id": "Mencapai setpoint" },
+        "3": { "en": "Fault", "id": "Fault" }
+      },
+      "poll": "fast"
+    },
+    {
+      "id": "fault_code",
+      "name": { "en": "Fault code", "id": "Kode fault" },
+      "description": { "en": "0 = no fault. Other codes are simulator-defined.", "id": "0 = tidak ada fault. Kode lain ditentukan simulator." },
+      "table": "holding_register", "address": 5, "type": "u16"
+    },
+    {
+      "id": "motor_current",
+      "name": { "en": "Motor current", "id": "Arus motor" },
+      "table": "holding_register", "address": 6, "type": "u16", "scale": 0.1, "unit": "A", "decimals": 1
+    }
+  ],
+  "commands": [
+    {
+      "id": "run", "kind": "run", "label": { "en": "Run drive", "id": "Jalankan drive" },
+      "register": "control_word", "value": 1, "readback_register": "control_word", "timeout_ms": 2000
+    },
+    {
+      "id": "stop", "kind": "stop",
+      "label": { "en": "Software stop. Not an emergency stop.", "id": "Stop perangkat lunak. Bukan tombol darurat." },
+      "register": "control_word", "value": 0, "readback_register": "control_word", "timeout_ms": 2000
+    },
+    {
+      "id": "set_frequency", "kind": "setpoint", "label": { "en": "Apply frequency setpoint", "id": "Terapkan setpoint frekuensi" },
+      "register": "freq_setpoint", "readback_register": "freq_setpoint"
+    },
+    {
+      "id": "reset_fault", "kind": "reset_fault", "label": { "en": "Reset fault", "id": "Reset fault" },
+      "register": "control_word", "value": 4, "readback_register": "fault_code", "expected": 0
+    }
+  ],
+  "notes": [
+    {
+      "en": "Simulated device: exists only in the BusLink simulator. Register map, ranges and fault codes are simulator design choices.",
+      "id": "Perangkat simulasi: hanya ada di simulator BusLink. Peta register, rentang dan kode fault adalah pilihan desain simulator."
+    }
+  ]
+}
