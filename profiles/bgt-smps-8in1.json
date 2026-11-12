@@ -39,7 +39,7 @@
       "name": { "en": "Soil moisture", "id": "Kelembapan tanah" },
       "description": { "en": "Volumetric water content.", "id": "Kadar air volumetrik." },
       "table": "holding_register", "address": 1, "type": "u16", "scale": 0.1, "unit": "%", "decimals": 1,
-      "poll": "normal", "source_page": "p. 4"
+      "display_range": [0, 100], "poll": "normal", "source_page": "p. 4"
     },
     {
       "id": "ec",

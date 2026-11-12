@@ -257,6 +257,9 @@ pub struct Register {
     pub decimals: Option<u8>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub valid_range: Option<[f64; 2]>,
+    /// Scale of the dashboard analog bar; display only, never used for decoding.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_range: Option<[f64; 2]>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub invalid_sentinels: Option<Vec<i128>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -168,6 +168,7 @@ export interface Register {
   unit?: string;
   decimals?: number;
   valid_range?: [number, number];
+  display_range?: [number, number];
   bits?: Record<string, Text>;
   access?: "read" | "read_write";
   write?: {

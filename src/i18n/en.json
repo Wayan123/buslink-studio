@@ -213,6 +213,8 @@
   "tile.waiting": "Waiting for first reading",
   "tile.age": "age {age}",
   "tile.cycle": "cycle {cycle}",
+  "tile.oos_high": "▲ Out of scale (above max)",
+  "tile.oos_low": "▼ Out of scale (below min)",
   "tile.bar": "Analog bar from {min} to {max}; shaded band is the normal range, ticks are alarm limits",
   "export.title": "Log and export",
   "export.hint": "Exports include quality, exception code, data age and profile version; times in ISO-8601 UTC, decimals with a dot.",

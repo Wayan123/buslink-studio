@@ -720,6 +720,16 @@ dl.legend dd {
   background: transparent;
   border: 2px dashed var(--text);
 }
+.bar-marker.oos {
+  width: 8px;
+  margin-left: -4px;
+  outline: 2px solid var(--text);
+}
+.bar-oos {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text);
+}
 .bar-scale {
   display: flex;
   justify-content: space-between;

@@ -78,6 +78,7 @@ fn register(id: &str, table: Table, address: u16, ty: TypeName, length: Option<u
         write: None,
         poll: None,
         source_page: None,
+        display_range: None,
     }
 }
 

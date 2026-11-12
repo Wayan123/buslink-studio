@@ -56,7 +56,7 @@ TOP_KEYS = {"$schema", "$comment", "schema_version", "profile_id", "profile_vers
 REQUIRED_TOP = ("schema_version", "profile_id", "profile_version", "vendor", "model", "support_level",
                 "transport", "registers")
 REG_KEYS = {"id", "name", "description", "table", "address", "doc_address", "type", "length", "word_order",
-            "scale", "offset", "unit", "decimals", "valid_range", "invalid_sentinels", "bits", "access",
+            "scale", "offset", "unit", "decimals", "valid_range", "display_range", "invalid_sentinels", "bits", "access",
             "write", "poll", "source_page"}
 WRITE_KEYS = {"min", "max", "step", "allowed_values", "risk", "role", "confirm", "readback"}
 SOURCE_KEYS = {"document", "revision", "url", "pages", "retrieved", "publisher"}
@@ -285,6 +285,9 @@ def check_register(r: Report, path: str, reg, ids: set[str]) -> dict | None:
     vr = reg.get("valid_range")
     if vr is not None and not (isinstance(vr, list) and len(vr) == 2 and all(is_num(x) for x in vr) and vr[0] < vr[1]):
         r.err(f"{path}.valid_range", "must be [min, max] with min < max (engineering units)")
+    dr = reg.get("display_range")
+    if dr is not None and not (isinstance(dr, list) and len(dr) == 2 and all(is_num(x) for x in dr) and dr[0] < dr[1]):
+        r.err(f"{path}.display_range", "must be [min, max] with min < max (engineering units)")
     sen = reg.get("invalid_sentinels")
     if sen is not None and not (isinstance(sen, list) and all(is_int(x) for x in sen)):
         r.err(f"{path}.invalid_sentinels", "must be a list of raw integers")

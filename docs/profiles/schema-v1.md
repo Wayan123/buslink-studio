@@ -54,6 +54,7 @@ Instance settings (which COM port or USB adapter, the unit ID actually used on s
 | `scale`, `offset` | no | number (scale ≠ 0) | Defaults 1 and 0. |
 | `unit`, `decimals` | no | text ≤ 16, int 0–9 | |
 | `valid_range` | no | `[min, max]` in engineering units | Out of range → `DECODE_ERROR`. |
+| `display_range` | no | `[min, max]` in engineering units, min < max | Scale of the dashboard analog bar when `valid_range` is absent. Display only; never changes decoding or quality. With neither range the bar is hidden. |
 | `invalid_sentinels` | no | list of raw ints | E.g. `32767` for "sensor open". |
 | `bits` | bitfield only | `{ "0".."15": label }` | |
 | `poll` | no | `fast` · `normal` · `slow` | Scheduling hint. |

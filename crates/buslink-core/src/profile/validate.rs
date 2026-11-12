@@ -64,7 +64,7 @@ const REQUIRED_TOP: [&str; 8] = [
     "transport",
     "registers",
 ];
-pub const REG_KEYS: [&str; 20] = [
+pub const REG_KEYS: [&str; 21] = [
     "id",
     "name",
     "description",
@@ -79,6 +79,7 @@ pub const REG_KEYS: [&str; 20] = [
     "unit",
     "decimals",
     "valid_range",
+    "display_range",
     "invalid_sentinels",
     "bits",
     "access",
@@ -663,6 +664,17 @@ fn check_register(r: &mut Report, path: &str, reg: &J, ids: &mut Vec<String>) ->
     if vr.is_some() && !vr_nums.is_some_and(|(lo, hi)| lo < hi) {
         r.err(
             format!("{path}.valid_range"),
+            "must be [min, max] with min < max (engineering units)",
+        );
+    }
+    let dr = o.get("display_range");
+    let dr_ok = dr.and_then(J::as_arr).is_some_and(|a| match a {
+        [lo, hi] => matches!((lo.as_num(), hi.as_num()), (Some(l), Some(h)) if l < h),
+        _ => false,
+    });
+    if dr.is_some() && !dr_ok {
+        r.err(
+            format!("{path}.display_range"),
             "must be [min, max] with min < max (engineering units)",
         );
     }

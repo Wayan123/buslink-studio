@@ -1,11 +1,11 @@
 {
-  "date": "2026-11-11T23:16:05.483Z",
+  "date": "2026-11-12T13:53:43.485Z",
   "platform": "Windows (WebView2 in the e2e build) + headless Chrome",
   "steps": [
     {
       "name": "connect to app over CDP",
       "ok": true,
-      "detail": "http://tauri.localhost/"
+      "detail": "about:blank"
     },
     {
       "name": "backend available in the app webview",
@@ -30,7 +30,7 @@
     {
       "name": "dashboard tiles show TIMEOUT with the last value kept",
       "ok": true,
-      "detail": "TIMEOUT · 2 s"
+      "detail": "TIMEOUT · 1 s"
     },
     {
       "name": "separate communication alarm in the banner",
@@ -40,7 +40,7 @@
     {
       "name": "trend shows a gap 'No data: TIMEOUT'",
       "ok": true,
-      "detail": "Simulated temperature controller (simulated): Process temperature (PV) — No data: TIMEOUT · 06:16:09–06:16:11 | Simulated temperature controller (simulated): Setpoint (SP) — No data: TIMEOUT · 06:16:09–06:16:11"
+      "detail": "Simulated temperature controller (simulated): Process temperature (PV) — No data: TIMEOUT · 20:53:48–20:53:50 | Simulated temperature controller (simulated): Setpoint (SP) — No data: TIMEOUT · 20:53:48–20:53:50"
     },
     {
       "name": "register inspector lists frames including the timeouts",
@@ -50,7 +50,7 @@
     {
       "name": "export CSV with quality + age columns and TIMEOUT rows",
       "ok": true,
-      "detail": "buslink-s1794438965906.csv: 336 rows, 32 TIMEOUT rows for sim-temp-controller-basic-u3, 303 GOOD rows; header: ts_utc,ts_ms,device_id,tag_id,value,text,unit,quality,exception_code,age_ms,value_ts_utc,raw_hex,seq,profile_id,profile_version"
+      "detail": "buslink-s1794491625219.csv: 336 rows, 32 TIMEOUT rows for sim-temp-controller-basic-u3, 303 GOOD rows; header: ts_utc,ts_ms,device_id,tag_id,value,text,unit,quality,exception_code,age_ms,value_ts_utc,raw_hex,seq,profile_id,profile_version"
     },
     {
       "name": "app at 360 px: no horizontal page scroll",
@@ -78,6 +78,6 @@
       "detail": "{\"cls\":\"skip\",\"outline\":\"solid\"}"
     }
   ],
-  "trend_render_note": "Raw samples from the live buffer · rendered in 4.2 ms",
+  "trend_render_note": "Raw samples from the live buffer · rendered in 4.5 ms",
   "summary": "15/15 passed"
 }

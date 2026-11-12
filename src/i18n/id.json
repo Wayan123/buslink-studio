@@ -213,6 +213,8 @@
   "tile.waiting": "Menunggu pembacaan pertama",
   "tile.age": "umur {age}",
   "tile.cycle": "siklus {cycle}",
+  "tile.oos_high": "▲ Di luar skala (di atas maks)",
+  "tile.oos_low": "▼ Di luar skala (di bawah min)",
   "tile.bar": "Bar analog dari {min} sampai {max}; pita arsir adalah rentang normal, garis kecil adalah batas alarm",
   "export.title": "Log dan ekspor",
   "export.hint": "Ekspor berisi kualitas, kode exception, umur data, dan versi profil; waktu ISO-8601 UTC, desimal memakai titik.",

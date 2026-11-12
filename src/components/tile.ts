@@ -1,11 +1,15 @@
 // ISA-101 tag tile: name, value + unit, quality label, age, analog bar with normal band and limit ticks.
 // Updated in place; never rebuilt per frame.
+import { barPct as pct, barRange, outOfScale, type Range } from "../barscale.ts";
 import { clear, h, setText } from "../dom.ts";
 import { decimalsFor, fmtAge, fmtNumber } from "../format.ts";
 import { lang, t, tx } from "../i18n.ts";
 import { displayQuality, qualityInfo } from "../quality.ts";
 import type { AlarmView, Register, TagView } from "../types.ts";
 import { priorityBadge, qualityBadge } from "./badges.ts";
+
+export { barRange };
+export type { Range };
 
 export interface TileContext {
   staleAfterMs: number;
@@ -14,33 +18,12 @@ export interface TileContext {
   now: number;
 }
 
-export interface Range {
-  min: number;
-  max: number;
-}
-
-/** Bar range: the register's valid range, else the alarm limits padded by 10 %. */
-export function barRange(reg: Register, alarms: AlarmView[]): Range | null {
-  if (reg.valid_range) return { min: reg.valid_range[0], max: reg.valid_range[1] };
-  const limits = alarms.map((a) => a.limit).filter((l): l is number => l !== null);
-  if (limits.length === 0) return null;
-  const lo = Math.min(...limits);
-  const hi = Math.max(...limits);
-  const pad = Math.max((hi - lo) * 0.25, Math.abs(hi) * 0.1, 1);
-  return { min: lo - pad, max: hi + pad };
-}
-
 /** Normal band between the innermost LO and HI limits. */
 export function normalBand(alarms: AlarmView[], r: Range): Range | null {
   const his = alarms.filter((a) => a.kind === "HI" || a.kind === "HI_HI").map((a) => a.limit ?? Infinity);
   const los = alarms.filter((a) => a.kind === "LO" || a.kind === "LO_LO").map((a) => a.limit ?? -Infinity);
   if (his.length === 0 && los.length === 0) return null;
   return { min: los.length ? Math.max(...los) : r.min, max: his.length ? Math.min(...his) : r.max };
-}
-
-function pct(v: number, r: Range): number {
-  const p = ((v - r.min) / (r.max - r.min)) * 100;
-  return Math.max(0, Math.min(100, p));
 }
 
 export class Tile {
@@ -147,8 +130,8 @@ export class Tile {
 
   private renderBar(tag: TagView | undefined, ctx: TileContext): void {
     clear(this.bar);
-    const r = barRange(this.reg, ctx.alarms);
-    if (!r || r.max <= r.min) {
+    const r = barRange(this.reg);
+    if (!r) {
       this.bar.hidden = true;
       return;
     }
@@ -161,16 +144,18 @@ export class Tile {
       track.append(h("div", { class: "bar-band", style: `left:${left}%;width:${width}%` }));
     }
     for (const a of ctx.alarms) {
-      if (a.limit === null) continue;
+      if (a.limit === null || a.limit < r.min || a.limit > r.max) continue;
       track.append(h("div", { class: `bar-tick p${a.priority}`, style: `left:${pct(a.limit, r)}%`, title: `${a.kind} ${a.limit}` }));
     }
     const v = tag?.value;
+    const oos = outOfScale(v, r);
     if (v !== null && v !== undefined) {
-      track.append(h("div", { class: "bar-marker", style: `left:${pct(v, r)}%` }));
+      track.append(h("div", { class: `bar-marker${oos ? " oos" : ""}`, style: `left:${pct(v, r)}%` }));
     }
     const L = lang();
     this.bar.append(
       track,
+      ...(oos ? [h("div", { class: "bar-oos" }, t(oos === "high" ? "tile.oos_high" : "tile.oos_low"))] : []),
       h(
         "div",
         { class: "bar-scale" },
@@ -180,7 +165,7 @@ export class Tile {
     );
     this.bar.setAttribute(
       "aria-label",
-      t("tile.bar", { min: fmtNumber(r.min, L), max: fmtNumber(r.max, L) }),
+      t("tile.bar", { min: fmtNumber(r.min, L), max: fmtNumber(r.max, L) }) + (oos ? `. ${t(oos === "high" ? "tile.oos_high" : "tile.oos_low")}` : ""),
     );
   }
 }
