@@ -1,0 +1,79 @@
+I'll start by listing what changed since the base commit.The pipe was blocked, so I'll run it without `tail`.The diff is 477 files, so I'll use targeted searches instead of reading all of it. First, category 1: write-frame construction.Write encoding is confined to `command/wire.rs`. Next I'll check who uses `WriteRequest` and the raw transport API, then look at the src-tauri commands.Category 1 looks clean so far. Now the command service itself.I'll read the rest of the command service (confirm and execute) and look at the LAN, MQTT and Tauri config files in parallel.The LAN guard looks solid. Next: TLS setup, the lifecycle in `lan/mod.rs`, the Tauri `share.rs`, and any place the token could reach a log.The LAN side is mostly clean. Now MQTT: config, TLS, outbox, and a check for any subscriptions or disabled verification.MQTT TLS and config look right. Next I'll check the service for subscriptions and credential logging, then the Tauri config and capabilities.Now the Tauri capability file and the Android manifest and USB plugin.I still need to check three things: the USB permission flow details, SAF export, and the profile and export guards.The USB permission code didn't show up in the plugin file, so it may live elsewhere. One last round of searches.Last two checks: the `.mbmap` import size limits, and a scan for secrets.**Verdict: fix before merge.** There are no critical or high findings. The write path, LAN server, MQTT and Tauri surface hold up. The open items are a self-asserted role and unvalidated TCP hosts (both medium), plus several low items, a few of which I could not fully verify.
+
+**Scope.** The diff is 477 files and about 127k lines, so I did not read all of it. I read the command service, `src-tauri` IPC, the LAN and MQTT modules, Tauri config and capabilities, the Android manifests and plugin, and the export and profile guards. I covered the rest with targeted searches. I changed nothing and ran only read-only git and file/search tools.
+
+## Findings
+
+| Sev | Location | Issue | Fix |
+|---|---|---|---|
+| medium | `src-tauri/src/control.rs` (`ArmReq`, `control_arm`) | The role comes from the webview request (`role: Role`). Only `Viewer` is refused, so any caller can claim `Commissioner` and unlock comm-config writes (unit ID, baud). The `user` string is also unbounded and goes into the audit row. IEC 62443 IAC/UC is not met, and the audit identity is self-asserted. | Derive the role from a host-side setting (for example a commissioner unlock that needs a deliberate action) and not from IPC. Cap `user` at 64 characters with no control characters. Say in the docs that this is a single-user local app. |
+| medium | `src-tauri/src/commands.rs` (`host_of`) and `crates/buslink-core/src/device.rs:69` | `connect_link` accepts any host name or IP for TCP. A host name such as `localhost` is fine, but a loopback IP literal makes `is_loopback_tcp()` true, and `simulated_only` profiles then count as simulator links. A port-forward or serial bridge on `127.0.0.1` pointing at real hardware would let "simulated" control commands reach a real VFD. This breaks the "control only for simulated devices" rule. | Allow the loopback exemption only for the in-process training server (match its exact port or a session-generated marker), not any loopback address. |
+| low | `crates/buslink-core/src/lan/routes.rs` (`authenticate`) | The token is accepted as `?t=` on every route and WebSocket, not only on `/`. That puts it in browser history and any proxy logs. `Referrer-Policy: no-referrer` and the cookie limit the spread, but the surface is wider than needed. | Accept `?t=` only on `GET /`, set the cookie, and redirect to a URL without the token. After that, accept the cookie only. |
+| low | `lan/mod.rs` (`LanSnapshot`, `ProfileEntry`) | The snapshot sends the full profile to LAN viewers, including `source.url` and `evidence.hardware[].record`, which can be local paths. | Send a display subset (id, version, register names, units, ranges) instead of the whole profile. |
+| low | `lan/serve.rs`, `lan/limits.rs` | The 32-connection cap is shared before authentication. A LAN host that holds 32 idle TLS or HTTP connections can starve viewers. The limits clear after the 5 s handshake and 10 s header timeouts, but the attacker can repeat. The effect is dashboard availability only. | Add a small per-IP connection cap, and count unauthenticated connections separately. |
+| low | `src-tauri/tauri.conf.json`, `routes.rs::csp` | `style-src 'unsafe-inline'` is allowed in both the app CSP and the LAN CSP. `script-src 'self'` holds, so the practical risk is small. | Move inline styles to classes or nonces when convenient. |
+| low | `src-tauri/src/control.rs` (`control_confirm`, `control_execute`) | Confirmation is only a preview-ID match over IPC. Any script running in the webview could call arm, preview, confirm and execute in sequence. The mitigations are the strict CSP, `textContent` rendering (`dom.ts`: no `innerHTML`), and the lack of remote content. Without those, this would be a bypass. | Optional hardening: require a native confirm dialog for `risk=high` writes. Keep the "no `innerHTML`" test as a gate. |
+| low | `src-tauri/src/share.rs` (`secret_store`) | On Android, MQTT passwords use `MemorySecretStore`, so they are lost on restart. This is safe, but it breaks the "Android Keystore" claim in the rules. | Keep the UI notice (`secret_persistent`) and the docs honest. Wire the Keystore before claiming parity. |
+| info | `src-tauri/Cargo.toml` (`e2e` feature) | The e2e feature adds loopback sharing and writes exports to `$BUSLINK_E2E_EXPORT_DIR`. It is off by default. | Add a release-pipeline check that fails if `--features e2e` is used. |
+| info | `crates/buslink-core/src/mqtt/service.rs` | The status topic is published retained (a last-will plus a status message). This is not a command, so it is allowed. The service never subscribes, so there is no inbound command path. | None. |
+
+## Verdict per category
+
+1. **Write frames outside `command/` and the simulator: no findings.** FC05/06/15/16 constants and encoding exist only in `command/wire.rs`. The only other users of `WriteRequest` are the simulator (decoding) and `command/mod.rs`. Tauri IPC carries only device, command and register IDs plus engineering values (`PanelRequest` uses `deny_unknown_fields`). There is no raw-PDU endpoint and no write method on `LanSource`.
+2. **Command service bypass: no findings.**
+   - `execute` requires the `Confirmed` state, and `ensure_armed` re-checks expiry at preview, confirm and execute.
+   - `PreparedFrame` is not `Clone` and is consumed by `send`.
+   - A second `execute` fails with `WrongState`.
+   - Unit 0 gives `BroadcastRejected`, and the unit is range-checked against the link.
+   - If the audit write fails, nothing is sent (fail-closed). Link loss disarms.
+   - No retry exists anywhere in the module.
+   - Reconnect, profile change and disconnect all disarm.
+   - The exception is the self-asserted role above.
+3. **Bounds: no findings.**
+   - `check_bounds` rejects, never clamps.
+   - It handles `allowed_values`, `min`/`max`, `step` and `valid_range`, rejects non-finite values, and refuses writes when no bounds exist.
+   - The profile validator requires `step > 0`, which closes the NaN pass-through I suspected.
+   - Comm-config values are checked: unit ID 1–247, and baud must be in the profile's code table.
+   - Comm registers cannot be written outside the wizard.
+4. **LAN server: no findings beyond the low items above.**
+   - The guard middleware wraps every route and the fallback.
+   - Order is rate limit, token, body rejection, GET-only.
+   - The token is 128 bits from the OS random source, compared with `ct_eq`.
+   - Bind is private IPv4 only (`check_bind` refuses `0.0.0.0`, IPv6, public and multicast), the port is ≥1024, and the server is off by default.
+   - Each start gets a fresh rcgen certificate and token. Stop drops the token and key and joins the tasks.
+   - There are limits on rate, failures with lockout, connections, WebSocket clients, message size and handshake time.
+   - I found no logging of the token. The cookie is `Secure; HttpOnly; SameSite=Strict`. The WebSocket origin is checked, there is no CORS, and path traversal is blocked.
+5. **MQTT: no findings.**
+   - The config has no password field and rejects unknown keys.
+   - The password lives in Windows Credential Manager (memory-only elsewhere), and errors go through `redact`.
+   - TLS is the default. Plain `mqtt://` needs an explicit `allow_insecure`. Credentials in the URL are refused.
+   - Verification uses native roots (or the platform verifier on Android) plus an optional user CA.
+   - A search of non-test code found no verifier bypass. The only `dangerous()` use is a pinning client in test code.
+   - There are no subscriptions.
+   - The outbox is capped at 100–1M rows and holds telemetry only.
+6. **Profiles, imports, exports: no findings, with limits on what I checked.** Profile JSON has a 1 MB cap, duplicate-key rejection, `deny_unknown_fields`, and no expression evaluation. `guard_text` escapes `= + - @`, tab and CR, and is used in CSV and XLSX (strings are written with `write_string`). Quality and exception columns are present in every export. I did not find the `.mbmap` or CSV import code, so I could not check its size limits.
+7. **Android: no findings, partly verified.**
+   - **Verified:**
+     - The service is `exported="false"` with type `connectedDevice`.
+     - The permission set matches the rules (no storage permissions).
+     - The permission request uses an explicit package intent, a 60 s timeout, a request ID extra, and a `RECEIVER_NOT_EXPORTED` detach receiver.
+     - `onStop` cancels the pending request.
+     - SAF export uses `ACTION_CREATE_DOCUMENT` with a safe-name regex and a MIME allow-list.
+     - The FileProvider is not exported.
+   - **Not checked:**
+     - The PendingIntent flags (`FLAG_MUTABLE | FLAG_CANCEL_CURRENT`) beyond seeing the call.
+     - The sender and request-ID match in `onReceive`.
+     - `onDestroy` cancellation.
+     - That the foreground service is started only from the foreground after the grant.
+     - Partial-document deletion.
+8. **Tauri: no findings.** The capability is `core:default` only, with no shell, fs, http or dialog grants for the webview. The CSP is set, with `connect-src` limited to IPC and `frame-ancestors 'none'`. No remote content is loaded. Input is validated: connect settings, `lan_start` (the IP must be one of the machine's listed interfaces) and `report_save_html` (5 MB cap plus a doctype check).
+9. **Secrets: no findings.** A regex scan for private keys, AWS and GitHub tokens, and hard-coded password, token or secret assignments over source and config files found nothing. `.gitleaks.toml` exists. I did not scan git history or binary files.
+10. **Quality honesty: no findings in the code I read, but not fully verified.** Exports, MQTT payloads and the LAN stream carry quality and age. MQTT replays the original `ts` and `seq`, and the LAN `lagged` path resends a full snapshot instead of skipping. I did not review the trend, decimation or UI tile code (`src/views/trends.ts` and others) for interpolation across gaps or stale values shown as fresh.
+
+## Not checked
+
+- Anything not named above, including the poll scheduler and the historian's SQL (trend queries from the LAN `tag` parameter, which I assume are parameterized but did not read).
+- The remaining parts of the Android plugin listed under item 7.
+- `hardware_verified` evidence enforcement in the Rust validator.
+- Dependency licences and CVEs.
+- Runtime behaviour. I ran no tests, as required.
