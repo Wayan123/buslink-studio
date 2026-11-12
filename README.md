@@ -23,7 +23,7 @@ Built for **Kiroween 2026** (category: Frankenstein) with Kiro. Every feature ca
 
 ## Quick start (no hardware needed)
 
-**Windows installer:** download `BusLink Studio_<version>_x64-setup.exe` from [Releases](../../releases), install it, then open **Connect → Start training mode**. The installer is unsigned, so SmartScreen may warn: choose *More info → Run anyway*.
+**Windows installer:** download `BusLink-Studio_0.1.0_x64-setup.exe` from [Releases](../../releases/latest) (SHA-256 in `SHA256SUMS.txt`), install it, then open **Connect → Start training mode**. The installer is unsigned, so SmartScreen may warn: choose *More info → Run anyway*.
 
 **From source** (Rust 1.85+, Node 20+, Windows for the desktop shell):
 
