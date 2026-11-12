@@ -6,6 +6,10 @@ Built for **Kiroween 2026** (category: Frankenstein) with Kiro. Every feature ca
 
 > **Status, stated plainly.** All automated checks run against the built-in simulator. The Windows app was driven end to end on Windows. The Android APK builds, but it has **not yet run on a phone with a real sensor**: the procedure and the empty result sheet are in [`docs/verification/android-hardware.md`](docs/verification/android-hardware.md).
 
+**User and technical manual (PDF):** [English](docs/manual/buslink-manual-en.pdf) · [Bahasa Indonesia](docs/manual/buslink-manual-id.pdf). Markdown versions: [EN](docs/manual/buslink-manual-en.md) · [ID](docs/manual/buslink-manual-id.md).
+
+![BusLink Studio overview in Training mode](docs/manual/img/bl-03-dashboard.png)
+
 ## What it does
 
 - **Live dashboard** that follows high-performance HMI rules (ISA-101 style): grey when normal, colour only for abnormal states. Analog bars use the profile's declared range only.
@@ -39,6 +43,51 @@ Android build notes: [`docs/android-build.md`](docs/android-build.md).
 ### Real hardware
 
 A USB to RS485 adapter (tested target: WCH CH343G, `1A86:55D3`, not isolated), the device's own power supply, A/B and GND wired, and 120 Ω termination at both bus ends. Only one Modbus master may poll a bus at a time. Profiles live in [`profiles/`](profiles); the schema is in [`docs/profiles/schema-v1.md`](docs/profiles/schema-v1.md).
+
+## How to use it (5 minutes, no hardware)
+
+All screenshots are from the real Windows app in Training mode, so every device shown is simulated. The full step-by-step guide with 25 figures is in the manual above.
+
+**1. Connect.** Open **Connect** and press **Start Training mode (simulated devices)**. A simulated RS485 bus starts with a soil sensor (unit 1), a VFD (unit 2) and a temperature controller (unit 3). For real hardware, use **Refresh ports**, choose the port and the serial settings from the device manual, and press **Connect serial link**. Then add the device from the **Device library**.
+
+![Connect page](docs/manual/img/bl-01-connect.png)
+
+**2. Read live values with their quality.** **Overview** shows one card per device. Each tile has the value with its unit, an analog bar (only when the profile declares a range), the data **age** and the poll cycle. Grey means normal.
+
+| Quality | Meaning |
+|---|---|
+| GOOD | The device answered and the value decoded |
+| TIMEOUT | No answer in time: the last value is kept but struck through, and its age keeps growing |
+| CRC_ERROR | The reply was corrupted on the wire |
+| EXCEPTION | The device answered with a Modbus exception, for example 02 Illegal Data Address |
+| STALE | No new data within about 3× the poll interval |
+| DECODE_ERROR / DISCONNECTED | The raw value broke the profile rules / the link is not polling |
+
+![A timeout on unit 3: TIMEOUT badges and struck-through values, while the other devices keep polling](docs/manual/img/bl-08-timeout-card.png)
+
+**3. Practise faults.** **Training** injects a timeout, CRC error, exception 02, frozen values or wrong word order into one simulated unit. Each fault ends by itself. The guided exercises on the same page explain what each fault should teach.
+
+**4. Trends break at gaps.** In **Trends**, the line stops wherever data is not GOOD, and a hatched band names the reason. Nothing is interpolated.
+
+![Trend gap labelled "No data: TIMEOUT"](docs/manual/img/bl-10-trend-gap.png)
+
+**5. See the bytes.** **Register inspector** shows the manual address next to the PDU offset that goes on the wire (40001 = offset 0), the raw hex, all four word orders for 32-bit values, and the last request/response frames.
+
+![Register inspector](docs/manual/img/bl-11-inspector.png)
+
+**6. Write safely (simulated VFD).** Open **Control (simulated)**, type your name and press **Arm control for this device**. Arming ends after 60 s without activity. A value outside the profile bounds is rejected next to the field. A valid value opens a dialog showing the exact frame, including the CRC. After **Send**, the app checks the device's acknowledgement, reads the register back and checks the process feedback. Every step lands in the **Audit log**.
+
+| Confirm the exact frame | Acknowledged, read back, verified |
+|---|---|
+| ![Confirm dialog](docs/manual/img/bl-16-confirm.png) | ![Read-back result](docs/manual/img/bl-17-readback.png) |
+
+**7. Share or publish.** **Share** serves a read-only view to browsers on the same LAN, protected by a private address, a per-session certificate and a token. The viewer has no connect, arm or write controls. **MQTT** publishes telemetry only and never subscribes.
+
+![The read-only LAN view on a phone](docs/manual/img/bl-24-lan-phone.png)
+
+**8. Keep a record.** On **Overview**, export CSV, XLSX or JSON with quality, exception code and age on every row. **Session report** prints a commissioning record.
+
+The software stop **is not an emergency stop**. Writes are enabled only for the simulated devices in this release.
 
 ## Architecture
 
