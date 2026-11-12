@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- IDs must be 0x hex: bare numbers are read as decimal, and an unparsable value turns the row into a wildcard.
+     The filter only controls auto-launch and "use by default"; the library prober picks the driver. -->
+<resources>
+    <usb-device vendor-id="0x1A86" product-id="0x55D3" /> <!-- WCH CH343 (USB TO RS485 (B)), CDC-ACM -->
+    <usb-device vendor-id="0x1A86" product-id="0x7523" /> <!-- WCH CH340 -->
+    <usb-device vendor-id="0x1A86" product-id="0x5523" /> <!-- WCH CH341 -->
+    <usb-device vendor-id="0x1A86" product-id="0x55D4" /> <!-- WCH CH9102, CDC-ACM -->
+</resources>

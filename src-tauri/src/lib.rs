@@ -1,17 +1,23 @@
 //! BusLink Studio Tauri shell: IPC over the core session service.
 //! Writes exist only through `control.rs` → `buslink_core::command` (safety rules 1–2).
 
+mod android_usb;
 mod commands;
 mod control;
+mod files;
 mod serial;
 mod state;
 
 use std::sync::atomic::Ordering;
 use tauri::Manager;
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let app = tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
+    let builder = tauri::Builder::default().plugin(tauri_plugin_buslink_usb::init());
+    // Native dialogs are desktop only; Android saves through the SAF picker in the USB plugin.
+    #[cfg(not(target_os = "android"))]
+    let builder = builder.plugin(tauri_plugin_dialog::init());
+    let app = builder
         .setup(|app| {
             let st = state::AppState::new(app.handle())?;
             state::spawn_emitter(app.handle().clone(), st.session.clone(), st.stop.clone());
@@ -83,6 +89,8 @@ pub fn run() {
             st.stop.store(true, Ordering::SeqCst);
             st.control.disarm(buslink_core::command::DisarmReason::AppBackground);
             st.session.shutdown();
+            #[cfg(target_os = "android")]
+            android_usb::stop_service(handle);
         }
     });
 }

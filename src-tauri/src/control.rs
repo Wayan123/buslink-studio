@@ -16,7 +16,6 @@ use buslink_core::session::{ExportFormat, Session};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
-use tauri_plugin_dialog::DialogExt;
 
 type R<T> = Result<T, String>;
 
@@ -221,26 +220,18 @@ fn save(app: &AppHandle, name: &str, label: &str, ext: &str, bytes: &[u8]) -> R<
             bytes: bytes.len(),
         });
     }
-    let picked = app
-        .dialog()
-        .file()
-        .set_file_name(name)
-        .add_filter(label, &[ext])
-        .blocking_save_file();
-    let Some(fp) = picked else {
-        return Ok(SaveResult {
+    match crate::files::save_bytes(app, name, label, ext, bytes)? {
+        Some(saved) => Ok(SaveResult {
+            saved: true,
+            path: saved.path,
+            bytes: bytes.len(),
+        }),
+        None => Ok(SaveResult {
             saved: false,
             path: None,
             bytes: 0,
-        });
-    };
-    let path = fp.into_path().map_err(|e| e.to_string())?;
-    std::fs::write(&path, bytes).map_err(|e| format!("could not write {}: {e}", path.display()))?;
-    Ok(SaveResult {
-        saved: true,
-        path: Some(path.display().to_string()),
-        bytes: bytes.len(),
-    })
+        }),
+    }
 }
 
 #[tauri::command]

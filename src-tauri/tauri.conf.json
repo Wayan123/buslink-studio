@@ -41,6 +41,9 @@
       "icons/icon.ico",
       "icons/icon.png"
     ],
+    "android": {
+      "minSdkVersion": 24
+    },
     "windows": {
       "webviewInstallMode": { "type": "downloadBootstrapper" },
       "nsis": { "installMode": "currentUser" }

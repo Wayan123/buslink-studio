@@ -53,15 +53,30 @@ export interface ConnectReq {
   tcp_port?: number;
 }
 
+export interface ConnectResult {
+  link_id: string;
+  isolation_advice: boolean;
+  otg_battery_advice: boolean;
+  high_baud_warning: boolean;
+}
+
+/** What Start polling achieved beyond polling (Android foreground service). */
+export interface StartResult {
+  android: boolean;
+  background: boolean;
+  notifications_denied: boolean;
+  error: string | null;
+}
+
 export const api = {
   appInfo: () => invoke<AppInfo>("app_info"),
   listPorts: () => invoke<PortView[]>("list_ports"),
   listProfiles: () => invoke<ProfileView[]>("list_profiles"),
-  connect: (req: ConnectReq) => invoke<{ link_id: string; isolation_advice: boolean }>("connect_link", { req }),
+  connect: (req: ConnectReq) => invoke<ConnectResult>("connect_link", { req }),
   reconnect: (id: string) => invoke<void>("reconnect_link", { id }),
   disconnect: (id: string) => invoke<void>("disconnect_link", { id }),
   removeLink: (id: string) => invoke<void>("remove_link", { id }),
-  startPolling: (id: string) => invoke<void>("start_polling", { id }),
+  startPolling: (id: string) => invoke<StartResult>("start_polling", { id }),
   stopPolling: (id: string) => invoke<void>("stop_polling", { id }),
   addDevice: (req: { link_id: string; profile_key: string; unit_id: number; name?: string; poll_interval_ms?: number }) =>
     invoke<string>("add_device", { req }),

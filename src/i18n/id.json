@@ -563,5 +563,10 @@
   "rep.col.feedback": "Umpan balik proses",
   "rep.col.user": "Pengguna (peran)",
   "rep.col.event": "Langkah",
-  "rep.col.result": "Hasil"
+  "rep.col.result": "Hasil",
+  "connect.android.note": "USB OTG: ponsel biasanya tidak bisa mengisi daya saat adapter terpasang, jadi pantau baterai pada pencatatan panjang. Izin USB diminta saat Anda menghubungkan.",
+  "connect.android.baud": "Di atas 115 200 baud ponsel dapat kehilangan byte; pakai baud lebih rendah untuk kerja lapangan.",
+  "connect.android.no_permission": "perlu izin",
+  "link.start.no_background": "Polling dimulai, tetapi akan berhenti saat aplikasi ditutup atau layar mati.",
+  "link.start.notifications_denied": "Polling berlanjut saat layar mati. Notifikasi status disembunyikan karena notifikasi tidak diizinkan untuk aplikasi ini."
 }

@@ -9,13 +9,12 @@ use buslink_core::device::{DeviceInstance, LinkConfig, LinkKind};
 use buslink_core::historian::{EventRow, SessionInfo};
 use buslink_core::profile::Profile;
 use buslink_core::protocol::rtu::{Parity, SerialSettings};
-use buslink_core::session::{DeviceInspection, ExportFormat, LiveSnapshot, SessionError};
+use buslink_core::session::{DeviceInspection, ExportFormat, LiveSnapshot, Session, SessionError};
 use buslink_core::trend::TrendSeries;
 use buslink_sim::training::{ActiveFault, TRAINING_DEVICES, TRAINING_LINK_ID, Training, TrainingFault, alarm_presets};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tauri::{AppHandle, State};
-use tauri_plugin_dialog::DialogExt;
 
 type R<T> = Result<T, String>;
 
@@ -46,8 +45,11 @@ pub fn app_info(state: State<'_, AppState>) -> AppInfo {
 }
 
 #[tauri::command]
-pub fn list_ports() -> R<Vec<PortView>> {
-    serial::list()
+pub async fn list_ports(app: AppHandle) -> R<Vec<PortView>> {
+    // Android port listing calls into Kotlin and blocks: keep it off the main thread.
+    tauri::async_runtime::spawn_blocking(move || serial::list(&app))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[derive(Serialize)]
@@ -87,6 +89,20 @@ pub struct ConnectResult {
     link_id: String,
     /// RTU links show the non-isolated adapter advice (safety rule 18).
     isolation_advice: bool,
+    /// Android RTU over OTG: the phone usually cannot charge, mind the battery (safety rule 18).
+    otg_battery_advice: bool,
+    /// Android: baud above 115 200 can lose fragments (research/03 row 37).
+    high_baud_warning: bool,
+}
+
+/// What Start polling achieved beyond polling itself (android-otg Req 6.7).
+#[derive(Serialize, Default)]
+pub struct StartResult {
+    android: bool,
+    /// The foreground service runs, so polling continues with the screen off.
+    background: bool,
+    notifications_denied: bool,
+    error: Option<String>,
 }
 
 fn slug(s: &str) -> String {
@@ -132,7 +148,18 @@ fn host_of(r: &ConnectReq) -> R<(String, u16)> {
 }
 
 #[tauri::command]
-pub fn connect_link(state: State<'_, AppState>, req: ConnectReq) -> R<ConnectResult> {
+pub async fn connect_link(state: State<'_, AppState>, req: ConnectReq) -> R<ConnectResult> {
+    // Opening a USB port may show the Android permission dialog and wait for the
+    // answer, which arrives on the main thread: run off it.
+    let session = Arc::clone(&state.session);
+    tauri::async_runtime::spawn_blocking(move || connect_blocking(&session, req))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn connect_blocking(session: &Session, req: ConnectReq) -> R<ConnectResult> {
+    let android = cfg!(target_os = "android");
+    let mut high_baud_warning = false;
     let (config, rtu) = match req.kind.as_str() {
         "rtu" => {
             let port = req.port.clone().unwrap_or_default();
@@ -140,11 +167,13 @@ pub fn connect_link(state: State<'_, AppState>, req: ConnectReq) -> R<ConnectRes
                 return Err("choose a serial port".into());
             }
             let serial = serial_of(&req)?;
+            high_baud_warning = android && serial.baud > crate::android_usb::MAX_RELIABLE_BAUD;
             (
                 LinkConfig {
                     id: slug(&port),
                     kind: LinkKind::Rtu { port, serial },
-                    min_inter_frame_ms: 0,
+                    // Android USB-serial needs at least 50 ms between frames (modbus.md).
+                    min_inter_frame_ms: if android { 50 } else { 0 },
                 },
                 true,
             )
@@ -175,10 +204,12 @@ pub fn connect_link(state: State<'_, AppState>, req: ConnectReq) -> R<ConnectRes
         _ => return Err("unknown link kind".into()),
     };
     let link_id = config.id.clone();
-    state.session.connect(config, false).map_err(err)?;
+    session.connect(config, false).map_err(err)?;
     Ok(ConnectResult {
         link_id,
         isolation_advice: rtu,
+        otg_battery_advice: android && rtu,
+        high_baud_warning,
     })
 }
 
@@ -198,8 +229,44 @@ pub fn remove_link(state: State<'_, AppState>, id: String) -> R<()> {
 }
 
 #[tauri::command]
-pub fn start_polling(state: State<'_, AppState>, id: String) -> R<()> {
-    state.session.start_polling(&id).map_err(err)
+pub async fn start_polling(app: AppHandle, state: State<'_, AppState>, id: String) -> R<StartResult> {
+    let session = Arc::clone(&state.session);
+    tauri::async_runtime::spawn_blocking(move || -> R<StartResult> {
+        #[cfg(target_os = "android")]
+        {
+            // Foreground service first (user action, app in foreground, USB permission already
+            // held because the port is open). A failure is reported; polling still starts.
+            let link = session.link_status().into_iter().find(|l| l.id == id);
+            let bg = match link {
+                Some(l) if !l.simulated => {
+                    let devices = u32::try_from(l.devices.len()).unwrap_or(u32::MAX);
+                    Some(crate::android_usb::start_service(&app, &l.label, devices))
+                }
+                _ => None,
+            };
+            if let Err(e) = session.start_polling(&id) {
+                if bg.as_ref().is_some_and(|b| b.background) {
+                    crate::android_usb::stop_service(&app);
+                }
+                return Err(err(e));
+            }
+            let bg = bg.unwrap_or_default();
+            Ok(StartResult {
+                android: true,
+                background: bg.background,
+                notifications_denied: bg.notifications_denied,
+                error: bg.error,
+            })
+        }
+        #[cfg(not(target_os = "android"))]
+        {
+            let _ = &app;
+            session.start_polling(&id).map_err(err)?;
+            Ok(StartResult::default())
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -309,26 +376,18 @@ pub async fn export_session(app: AppHandle, state: State<'_, AppState>, format: 
             ExportFormat::Xlsx => ("Excel workbook", "xlsx"),
             ExportFormat::Json => ("JSON", "json"),
         };
-        let picked = app
-            .dialog()
-            .file()
-            .set_file_name(&name)
-            .add_filter(label, &[ext])
-            .blocking_save_file();
-        let Some(fp) = picked else {
-            return Ok(ExportResult {
+        match crate::files::save_bytes(&app, &name, label, ext, &bytes)? {
+            Some(saved) => Ok(ExportResult {
+                saved: true,
+                path: saved.path,
+                bytes: bytes.len(),
+            }),
+            None => Ok(ExportResult {
                 saved: false,
                 path: None,
                 bytes: 0,
-            });
-        };
-        let path = fp.into_path().map_err(|e| e.to_string())?;
-        std::fs::write(&path, &bytes).map_err(|e| format!("could not write {}: {e}", path.display()))?;
-        Ok(ExportResult {
-            saved: true,
-            path: Some(path.display().to_string()),
-            bytes: bytes.len(),
-        })
+            }),
+        }
     })
     .await
     .map_err(|e| e.to_string())?

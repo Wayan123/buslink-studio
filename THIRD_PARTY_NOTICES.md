@@ -28,8 +28,18 @@ No GPL-only dependency is used. Regenerate this list when dependencies change.
 |---|---|---|---|
 | tauri | 2.12.5 | MIT OR Apache-2.0 | App shell, IPC, events |
 | tauri-build | 2.7.4 | MIT OR Apache-2.0 | Build script |
-| tauri-plugin-dialog | 2.8.4 | MIT OR Apache-2.0 | Native save dialog for exports (opened from Rust only) |
+| tauri-plugin-dialog | 2.8.4 (not on Android) | MIT OR Apache-2.0 | Native save dialog for exports (opened from Rust only) |
 | serialport | 4.10.1 (default features off, Windows only) | MPL-2.0 | Windows COM ports, VID:PID listing. Used unmodified as a library; MPL-2.0 file-level copyleft applies only to its own files. |
+
+## Android (`plugins/tauri-plugin-buslink-usb/`, `src-tauri/gen/android/`)
+
+| Component | Version | License | Used for |
+|---|---|---|---|
+| tauri-plugin (build) | 2.7.2 | MIT OR Apache-2.0 | Plugin build script |
+| usb-serial-for-android (`com.github.mik3y`, JitPack) | 3.12.0 | MIT | USB serial drivers (CDC-ACM, CH34x, CP210x, FTDI), Kotlin side of the plugin |
+| androidx.core / appcompat | 1.13.1 / 1.7.1 | Apache-2.0 | Notifications, lifecycle |
+| jackson-databind | 2.15.3 | Apache-2.0 | Tauri plugin argument parsing |
+| Gradle / Android Gradle Plugin / Kotlin | 9.6.1 / 9.3.1 / 2.2.10 | Apache-2.0 | Build tools (not shipped) |
 
 Tauri pulls in a large transitive tree (wry, tao, webview2-com, windows-*, etc.), MIT and/or Apache-2.0; see `src-tauri/Cargo.lock`.
 

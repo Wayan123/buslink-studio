@@ -1,4 +1,4 @@
-//! Desktop serial glue (app-shell-desktop Req 2): port listing with VID:PID
+//! Serial glue (Windows `serialport`, Android USB through the plugin) (app-shell-desktop Req 2): port listing with VID:PID
 //! chip detection, and a `Transport` over the `serialport` crate.
 //! Adapters are identified by VID:PID only, never by friendly name.
 
@@ -6,6 +6,7 @@ use buslink_core::protocol::rtu::SerialSettings;
 use buslink_core::transport::usb_ids::{UsbChip, classify, vid_pid_label};
 use buslink_core::transport::{Transport, TransportError};
 use serde::Serialize;
+use tauri::AppHandle;
 
 #[derive(Clone, Debug, Serialize)]
 pub struct PortView {
@@ -19,10 +20,14 @@ pub struct PortView {
     pub manufacturer: Option<String>,
     pub product: Option<String>,
     pub serial_number: Option<String>,
+    /// Android only: whether the app already holds USB permission for this device.
+    pub has_permission: Option<bool>,
+    /// Android only: usb-serial-for-android driver class (e.g. `CdcAcmSerialDriver`).
+    pub driver: Option<String>,
 }
 
 impl PortView {
-    fn usb(
+    pub(crate) fn usb(
         name: String,
         vid: u16,
         pid: u16,
@@ -40,9 +45,12 @@ impl PortView {
             manufacturer,
             product,
             serial_number: serial,
+            has_permission: None,
+            driver: None,
         }
     }
 
+    #[cfg_attr(target_os = "android", allow(dead_code))]
     fn other(name: String, kind: &'static str) -> Self {
         Self {
             name,
@@ -54,6 +62,8 @@ impl PortView {
             manufacturer: None,
             product: None,
             serial_number: None,
+            has_permission: None,
+            driver: None,
         }
     }
 }
@@ -65,7 +75,7 @@ mod imp {
     use std::io::{Read, Write};
     use std::time::Duration;
 
-    pub fn list() -> Result<Vec<PortView>, String> {
+    pub fn list(_app: &AppHandle) -> Result<Vec<PortView>, String> {
         let ports = serialport::available_ports().map_err(|e| e.to_string())?;
         Ok(ports
             .into_iter()
@@ -89,7 +99,7 @@ mod imp {
         TransportError::Disconnected(e.to_string())
     }
 
-    pub fn open(name: &str, s: SerialSettings) -> Result<Box<dyn Transport>, TransportError> {
+    pub fn open(_app: &AppHandle, name: &str, s: SerialSettings) -> Result<Box<dyn Transport>, TransportError> {
         s.validate().map_err(|e| TransportError::Io(e.into()))?;
         let data_bits = if s.data_bits == 7 {
             DataBits::Seven
@@ -153,15 +163,28 @@ mod imp {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "android")]
 mod imp {
     use super::*;
 
-    pub fn list() -> Result<Vec<PortView>, String> {
+    pub fn list(app: &AppHandle) -> Result<Vec<PortView>, String> {
+        crate::android_usb::list(app)
+    }
+
+    pub fn open(app: &AppHandle, name: &str, s: SerialSettings) -> Result<Box<dyn Transport>, TransportError> {
+        crate::android_usb::open(app, name, s)
+    }
+}
+
+#[cfg(not(any(windows, target_os = "android")))]
+mod imp {
+    use super::*;
+
+    pub fn list(_app: &AppHandle) -> Result<Vec<PortView>, String> {
         Ok(Vec::new())
     }
 
-    pub fn open(_name: &str, _s: SerialSettings) -> Result<Box<dyn Transport>, TransportError> {
+    pub fn open(_app: &AppHandle, _name: &str, _s: SerialSettings) -> Result<Box<dyn Transport>, TransportError> {
         Err(TransportError::Io(
             "serial ports are not available in this build (Windows only for now)".into(),
         ))

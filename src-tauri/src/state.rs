@@ -51,10 +51,10 @@ pub struct AppState {
     pub stop: Arc<AtomicBool>,
 }
 
-fn factory(training: Arc<Mutex<Option<Arc<Training>>>>) -> TransportFactory {
+fn factory(app: AppHandle, training: Arc<Mutex<Option<Arc<Training>>>>) -> TransportFactory {
     Arc::new(move |cfg: &LinkConfig| -> Result<Box<dyn Transport>, TransportError> {
         match &cfg.kind {
-            LinkKind::Rtu { port, serial } => serial::open(port, *serial),
+            LinkKind::Rtu { port, serial } => serial::open(&app, port, *serial),
             LinkKind::Tcp { host, port } | LinkKind::RtuOverTcp { host, port, .. } => {
                 TcpTransport::connect(host, *port, TCP_CONNECT_TIMEOUT_MS).map(|t| Box::new(t) as Box<dyn Transport>)
             }
@@ -94,7 +94,7 @@ impl AppState {
                 logging_interval_ms: 1000,
             },
             Arc::clone(&clock),
-            factory(Arc::clone(&training)),
+            factory(app.clone(), Arc::clone(&training)),
         )
         .map_err(|e| e.to_string())?;
         let mut profile_errors = Vec::new();
@@ -126,11 +126,20 @@ pub fn spawn_emitter(app: AppHandle, session: Arc<Session>, stop: Arc<AtomicBool
         .name("buslink-ui-frames".into())
         .spawn(move || {
             let mut last_emit = Instant::now();
+            #[cfg(target_os = "android")]
+            let mut service = crate::android_usb::ServiceSync::new();
+            #[cfg(target_os = "android")]
+            let mut last_sync = Instant::now();
             while !stop.load(Ordering::SeqCst) {
                 std::thread::sleep(FRAME_PERIOD);
                 let mut frame = session.take_frame();
                 if frame.links.is_none() && last_emit.elapsed() >= HEARTBEAT {
                     frame.links = Some(session.link_status());
+                }
+                #[cfg(target_os = "android")]
+                if last_sync.elapsed() >= Duration::from_secs(1) {
+                    last_sync = Instant::now();
+                    sync_service(&app, &session, &mut service);
                 }
                 if frame.is_empty() {
                     continue;
@@ -143,4 +152,22 @@ pub fn spawn_emitter(app: AppHandle, session: Arc<Session>, stop: Arc<AtomicBool
     if let Err(e) = spawned {
         eprintln!("buslink: could not start the frame emitter: {e}");
     }
+}
+
+/// Keep the foreground service in step with the links: it runs only while a real
+/// (non-simulated) link polls, and stops on disconnect, detach and polling stop.
+/// Starting it is a user action (`start_polling`); this only updates or stops it.
+#[cfg(target_os = "android")]
+fn sync_service(app: &AppHandle, session: &Session, service: &mut crate::android_usb::ServiceSync) {
+    use buslink_core::session::LinkState;
+    let links = session.link_status();
+    let polling: Vec<_> = links
+        .iter()
+        .filter(|l| !l.simulated && l.state == LinkState::Polling)
+        .collect();
+    let want = polling.first().map(|l| {
+        let devices: usize = polling.iter().map(|l| l.devices.len()).sum();
+        (l.label.clone(), "polling", u32::try_from(devices).unwrap_or(u32::MAX))
+    });
+    service.sync(app, want);
 }

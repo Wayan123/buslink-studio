@@ -225,6 +225,7 @@ dependencies = [
  "serialport",
  "tauri",
  "tauri-build",
+ "tauri-plugin-buslink-usb",
  "tauri-plugin-dialog",
 ]
 
@@ -3462,6 +3463,17 @@ dependencies = [
  "serde_json",
  "tauri-utils",
  "walkdir",
+]
+
+[[package]]
+name = "tauri-plugin-buslink-usb"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

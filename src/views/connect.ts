@@ -17,6 +17,15 @@ export function connectView(): View {
   const linksBox = h("div", { class: "links" });
   const status = statusLine();
 
+  // Shown on Android only: USB OTG and battery (safety rule 18).
+  const androidNote = h("p", { class: "advice", role: "note", hidden: true }, t("connect.android.note"));
+  void api
+    .appInfo()
+    .then((i) => {
+      androidNote.hidden = i.platform !== "android";
+    })
+    .catch(() => undefined);
+
   // --- RTU form ---
   const portSel = h("select");
   const baudIn = h("input", { type: "number", inputmode: "numeric", min: 300, max: 3000000, value: 9600, list: "bauds" });
@@ -37,6 +46,7 @@ export function connectView(): View {
     field("rtu-parity", t("serial.parity"), paritySel).el,
     field("rtu-stop", t("serial.stop_bits"), stopSel).el,
     h("p", { class: "advice", role: "note" }, t("connect.isolation")),
+    androidNote,
     h("button", { type: "submit", class: "primary" }, t("connect.rtu.action")),
   );
   rtuForm.addEventListener("submit", (e) => {
@@ -119,7 +129,7 @@ export function connectView(): View {
     status.set(t("connect.connecting"));
     try {
       const r = await api.connect(req);
-      status.set(t("connect.connected", { id: r.link_id }), "ok");
+      status.set(t("connect.connected", { id: r.link_id }) + (r.high_baud_warning ? ` ${t("connect.android.baud")}` : ""), "ok");
     } catch (e) {
       status.set(errorText(e), "error");
     }
@@ -135,7 +145,7 @@ export function connectView(): View {
     }
     const rows = ports.map((p) => {
       const chip = p.chip ? `${p.chip.vendor} ${p.chip.chip} (${p.chip.driver})` : t("connect.ports.unknown_chip");
-      portSel.append(h("option", { value: p.name }, `${p.name}${p.vid_pid ? ` · ${p.vid_pid}` : ""}${p.chip ? ` · ${p.chip.chip}` : ""}`));
+      portSel.append(h("option", { value: p.name }, `${p.name}${p.vid_pid ? ` · ${p.vid_pid}` : ""}${p.chip ? ` · ${p.chip.chip}` : ""}${p.has_permission === false ? ` · ${t("connect.android.no_permission")}` : ""}`));
       return h(
         "tr",
         null,
@@ -174,6 +184,13 @@ export function connectView(): View {
     }
   }
 
+  async function startPolling(id: string) {
+    const r = await api.startPolling(id);
+    // Android: say honestly whether polling continues with the screen off.
+    if (r.error) status.set(`${t("link.start.no_background")} ${r.error}`, "error");
+    else if (r.notifications_denied) status.set(t("link.start.notifications_denied"), "error");
+  }
+
   function linkActions(l: LinkView): HTMLElement {
     const act = (label: string, fn: () => Promise<void>, cls = "") => {
       const b = h("button", { type: "button", class: cls, "data-fk": `${l.id}:${label}` }, label);
@@ -190,7 +207,7 @@ export function connectView(): View {
       return b;
     };
     const box = h("div", { class: "actions" });
-    if (l.state === "connected") box.append(act(t("link.start"), () => api.startPolling(l.id), "primary"));
+    if (l.state === "connected") box.append(act(t("link.start"), () => startPolling(l.id), "primary"));
     if (l.state === "polling") box.append(act(t("link.stop"), () => api.stopPolling(l.id)));
     if (l.state === "down" || l.state === "disconnected") box.append(act(t("link.reconnect"), () => api.reconnect(l.id)));
     if (l.state === "connected" || l.state === "polling") box.append(h("span", { class: "spacer" }), act(t("link.disconnect"), () => api.disconnect(l.id)));

@@ -242,6 +242,10 @@ export interface PortView {
   manufacturer: string | null;
   product: string | null;
   serial_number: string | null;
+  /** Android only: the app already holds USB permission. */
+  has_permission?: boolean | null;
+  /** Android only: usb-serial-for-android driver class. */
+  driver?: string | null;
 }
 
 export interface Gap {

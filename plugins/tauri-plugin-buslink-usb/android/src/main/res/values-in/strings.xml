@@ -1,0 +1,8 @@
+<resources>
+    <string name="buslink_channel_name">Status polling</string>
+    <string name="buslink_notif_title">BusLink Studio</string>
+    <string name="buslink_state_polling">Polling · %1$s · %2$d perangkat</string>
+    <string name="buslink_state_stopped">Terhubung, tidak polling · %1$s</string>
+    <string name="buslink_state_disconnected">TERPUTUS · %1$s</string>
+    <string name="buslink_action_disconnect">Putuskan</string>
+</resources>

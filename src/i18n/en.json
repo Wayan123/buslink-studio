@@ -563,5 +563,10 @@
   "rep.col.feedback": "Process feedback",
   "rep.col.user": "User (role)",
   "rep.col.event": "Step",
-  "rep.col.result": "Result"
+  "rep.col.result": "Result",
+  "connect.android.note": "USB OTG: the phone usually cannot charge while the adapter is connected, so watch the battery on long logs. USB permission is asked when you connect.",
+  "connect.android.baud": "Above 115 200 baud the phone can lose bytes; use a lower baud rate for field work.",
+  "connect.android.no_permission": "permission needed",
+  "link.start.no_background": "Polling started, but it will stop when the app is closed or the screen is off.",
+  "link.start.notifications_denied": "Polling continues with the screen off. The status notification is hidden because notifications are not allowed for this app."
 }
