@@ -54,3 +54,13 @@ Everything else Android-specific (USB, service, permissions, SAF) lives in `plug
 
 - AGP/Kotlin deprecation warnings (`android.newDsl=false`, legacy variant API) come from the Tauri template; not suppressed.
 - `Daemon compilation failed … different roots` for `tauri-android`: the Tauri Kotlin library is compiled from the cargo registry on `C:` while the project is on `D:`; the Kotlin incremental cache cannot relativize the paths. Gradle prints "Using fallback strategy: Compile without Kotlin daemon" and continues. Harmless but slow; no change made.
+
+
+## LAN dashboard and MQTT (lan-mqtt, E7)
+
+Nothing under `src-tauri/gen/android/` was edited for this epic.
+
+- `buslink-core` type-checks for `aarch64-linux-android` (including the `rustls-platform-verifier` branch): `cargo.exe check -p buslink-core --target aarch64-linux-android --target-dir target\windows` with `CC_aarch64_linux_android` / `AR_aarch64_linux_android` pointing at the NDK 28.2 `aarch64-linux-android24-clang.cmd` and `llvm-ar.exe`. An APK was **not** built and nothing ran on the phone.
+- LAN server on Android: binds a private address from `getifaddrs` (if-addrs). `INTERNET` is already declared, and targetSdk 36 needs no `ACCESS_LOCAL_NETWORK`. Not enforced yet: running the server only while the foreground service runs (E6 owns that service). A sleeping phone will stop answering.
+- MQTT TLS on Android uses `rustls-platform-verifier`, which needs its Kotlin component and Gradle repository before it works in an APK (see its README, "Android"). **To do**; until then an Android build can only trust a CA the user pastes in the MQTT panel, which also works on the platform verifier path (pasted CA only).
+- Password storage on Android: **not implemented**. The shell keeps the MQTT password in memory only and the panel says so. A Kotlin Keystore command in `tauri-plugin-buslink-usb` is the planned fix.

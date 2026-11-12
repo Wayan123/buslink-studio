@@ -4,7 +4,10 @@ import "./styles.css";
 import { api, errorText, hasBackend, onFrame } from "./api.ts";
 import { announce, clear, h, setText } from "./dom.ts";
 import { lang, onLangChange, setLang, t } from "./i18n.ts";
-import { loadProfiles } from "./profiles.ts";
+import { syncServerTime } from "./clock.ts";
+import { LAN_NAV, LAN_ROUTES, isLan, lanSnapshot, lanStream, type StreamState } from "./lan.ts";
+import { loadProfiles, primeProfiles } from "./profiles.ts";
+import { sharingIndicator, startSharingPoll } from "./sharing.ts";
 import { store } from "./store.ts";
 import { applyTheme, themeChoice, type ThemeChoice } from "./theme.ts";
 import type { AlarmView, LinkView } from "./types.ts";
@@ -17,13 +20,20 @@ import { connectView } from "./views/connect.ts";
 import { dashboardView } from "./views/dashboard.ts";
 import { inspectorView } from "./views/inspector.ts";
 import { libraryView } from "./views/library.ts";
+import { mqttView } from "./views/mqtt.ts";
+import { shareView } from "./views/share.ts";
 import { trainingView } from "./views/training.ts";
 import { trendsView } from "./views/trends.ts";
 import type { View } from "./views/view.ts";
 
 applyTheme();
 
-const NAV: [string, string][] = [
+/** Browser (LAN) build: read-only overview and trends, served by the app. */
+const LAN = isLan();
+if (LAN) document.body.classList.add("lan");
+let streamState: StreamState = "connecting";
+
+const APP_NAV: [string, string][] = [
   ["#/dashboard", "nav.overview"],
   ["#/connect", "nav.connect"],
   ["#/library", "nav.library"],
@@ -35,7 +45,10 @@ const NAV: [string, string][] = [
   ["#/audit", "nav.audit"],
   ["#/report", "nav.report"],
   ["#/training", "nav.training"],
+  ["#/share", "nav.share"],
+  ["#/mqtt", "nav.mqtt"],
 ];
+const NAV: [string, string][] = LAN ? LAN_NAV : APP_NAV;
 
 const root = document.getElementById("app") ?? document.body;
 let current: View | null = null;
@@ -62,9 +75,12 @@ function route(): void {
     audit: () => auditView(),
     report: () => reportView(),
     training: () => trainingView(),
+    share: () => shareView(),
+    mqtt: () => mqttView(),
   };
-  const fallback = store.links.length ? "dashboard" : "connect";
-  const factory = make[path] ?? make[fallback];
+  const fallback = LAN || store.links.length ? "dashboard" : "connect";
+  // The browser build has no other views to open, whatever the URL says.
+  const factory = LAN && !LAN_ROUTES.includes(path) ? make[fallback] : (make[path] ?? make[fallback]);
   current = factory ? factory() : null;
   if (current) main.append(current.el);
   for (const a of navEl.querySelectorAll("a")) {
@@ -105,6 +121,7 @@ function header(): HTMLElement {
     h("a", { class: "skip", href: "#main" }, t("nav.skip")),
     h("div", { class: "brand" }, h("span", { class: "brand-name" }, "BusLink Studio"), h("span", { class: "brand-sub" }, t("app.tagline"))),
     alarmBanner(),
+    LAN ? null : sharingIndicator(),
     h("div", { class: "settings" }, langSel, themeSel),
     navEl,
   );
@@ -112,7 +129,10 @@ function header(): HTMLElement {
 
 function renderNotices(): void {
   clear(notices);
-  if (!hasBackend()) notices.append(h("p", { class: "notice error-text", role: "alert" }, t("app.no_backend")));
+  if (LAN) {
+    notices.append(h("p", { class: "notice", "data-testid": "lan-readonly" }, t("lan.readonly")));
+    notices.append(h("p", { class: `notice stream-${streamState}`, role: "status", "data-testid": "lan-stream" }, t(`lan.stream.${streamState}`)));
+  } else if (!hasBackend()) notices.append(h("p", { class: "notice error-text", role: "alert" }, t("app.no_backend")));
   if (store.historianError) notices.append(h("p", { class: "notice error-text" }, t("app.historian_error", { error: store.historianError })));
   if (store.droppedTotal > 0) notices.append(h("p", { class: "notice" }, t("app.dropped", { n: store.droppedTotal })));
   if (store.links.some((l) => l.simulated)) notices.append(h("p", { class: "notice sim-note" }, t("app.training_active")));
@@ -141,9 +161,54 @@ function announceChanges(links: LinkView[] | null, alarms: AlarmView[] | null): 
   }
 }
 
-async function boot(): Promise<void> {
+/** Browser build: one GET for the first picture, then the WebSocket. Nothing can be written from here. */
+async function bootLan(): Promise<void> {
   shell();
   window.addEventListener("hashchange", route);
+  try {
+    const snap = await lanSnapshot();
+    primeProfiles(snap.profiles);
+    syncServerTime(snap.ts_ms);
+    store.applySnapshot(snap);
+    prevLinks = new Map(snap.links.map((l) => [l.id, l.state]));
+    prevActive = new Set(snap.alarms.alarms.filter((a) => a.active).map((a) => a.id));
+  } catch (e) {
+    notices.append(h("p", { class: "notice error-text", role: "alert" }, t("lan.load_failed", { error: errorText(e) })));
+  }
+  lanStream({
+    onState: (s) => {
+      if (s === streamState) return;
+      streamState = s;
+      renderNotices();
+      announce(t(`lan.stream.${s}`));
+    },
+    onSnapshot: (snap) => {
+      primeProfiles(snap.profiles);
+      syncServerTime(snap.ts_ms);
+      store.applySnapshot(snap);
+    },
+    onFrame: (f) => {
+      syncServerTime(f.ts_ms);
+      store.applyFrame(f);
+      announceChanges(f.links, f.alarms?.alarms ?? null);
+    },
+    onLagged: (n) => {
+      store.droppedTotal += n;
+      renderNotices();
+    },
+  });
+  store.subscribe((c) => {
+    if (c.links || c.points) renderNotices();
+  });
+  route();
+  renderFooter();
+}
+
+async function boot(): Promise<void> {
+  if (LAN) return bootLan();
+  shell();
+  window.addEventListener("hashchange", route);
+  startSharingPoll();
   // Safety rule 3: arming is dropped when the app goes to the background (minimized, phone home button).
   document.addEventListener("visibilitychange", () => {
     if (document.hidden && hasBackend()) void api.controlDisarm("app_background").catch(() => undefined);
@@ -179,6 +244,10 @@ async function boot(): Promise<void> {
 
 let info: Awaited<ReturnType<typeof api.appInfo>> | null = null;
 function renderFooter(): void {
+  if (LAN) {
+    setText(footer, `BusLink Studio · ${t("lan.readonly_short")} · Apache-2.0`);
+    return;
+  }
   setText(footer, info ? `BusLink Studio ${info.version} · ${info.platform} · ${t("app.session")} ${info.session_id} · Apache-2.0` : "BusLink Studio");
 }
 

@@ -6,6 +6,7 @@ mod commands;
 mod control;
 mod files;
 mod serial;
+mod share;
 mod state;
 
 use std::sync::atomic::Ordering;
@@ -22,6 +23,7 @@ pub fn run() {
             let st = state::AppState::new(app.handle())?;
             state::spawn_emitter(app.handle().clone(), st.session.clone(), st.stop.clone());
             app.manage(st);
+            app.manage(share::ShareState::new());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -73,6 +75,18 @@ pub fn run() {
             control::audit_export,
             control::report_data,
             control::report_save_html,
+            share::lan_interfaces,
+            share::lan_start,
+            share::lan_stop,
+            share::lan_status,
+            share::mqtt_get,
+            share::mqtt_status,
+            share::mqtt_save_config,
+            share::mqtt_set_password,
+            share::mqtt_clear_password,
+            share::mqtt_test,
+            share::mqtt_start,
+            share::mqtt_stop,
         ])
         .build(tauri::generate_context!());
     let app = match app {
@@ -86,6 +100,10 @@ pub fn run() {
         if let tauri::RunEvent::Exit = event
             && let Some(st) = handle.try_state::<state::AppState>()
         {
+            // Sharing and MQTT never outlive the window (safety rules 15 and 16).
+            if let Some(sh) = handle.try_state::<share::ShareState>() {
+                sh.shutdown();
+            }
             st.stop.store(true, Ordering::SeqCst);
             st.control.disarm(buslink_core::command::DisarmReason::AppBackground);
             st.session.shutdown();

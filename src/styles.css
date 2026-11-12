@@ -1023,3 +1023,66 @@ tr.dim td {
     scroll-behavior: auto !important;
   }
 }
+
+/* ---------- sharing: LAN view and MQTT (lan-mqtt) ---------- */
+.share-indicators {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+.share-indicators:empty {
+  display: none;
+}
+.badge.sharing {
+  background: var(--info);
+  color: var(--info-text);
+  border-color: var(--info);
+  text-decoration: none;
+  min-height: 1.5rem;
+}
+.badge.sharing .shape {
+  fill: var(--info-text);
+}
+.wide {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+canvas.qr {
+  display: block;
+  width: 15rem;
+  max-width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  border: 1px solid var(--line);
+  margin: 0.5rem 0;
+}
+dl.kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.2rem 1rem;
+  margin: 0.5rem 0;
+}
+dl.kv dt {
+  color: var(--text-muted);
+}
+dl.kv dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+textarea.mono {
+  width: 100%;
+  min-height: 5rem;
+}
+.notice.stream-reconnecting {
+  border-left-color: var(--quality-bad);
+  border-left-style: dashed;
+}
+body.lan .notice[data-testid="lan-readonly"] {
+  border-left-color: var(--info);
+}
+
+/* An element with the hidden attribute stays hidden even when a class sets display. */
+[hidden] {
+  display: none !important;
+}

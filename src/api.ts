@@ -3,6 +3,7 @@
 // command service checks arming, bounds and confirmation and builds the frame (safety rules 2-3).
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { isLan, lanSnapshot, lanTrend } from "./lan.ts";
 import type {
   AuditRow,
   CommandOutcome,
@@ -27,6 +28,12 @@ import type {
   TrainingFault,
   TrainingStatus,
   TrendSeries,
+  LanInterfaces,
+  LanStatus,
+  MqttConfig,
+  MqttStatus,
+  MqttTestReport,
+  MqttView,
 } from "./types.ts";
 
 export const FRAME_EVENT = "buslink://frame";
@@ -68,7 +75,7 @@ export interface StartResult {
   error: string | null;
 }
 
-export const api = {
+const tauriApi = {
   appInfo: () => invoke<AppInfo>("app_info"),
   listPorts: () => invoke<PortView[]>("list_ports"),
   listProfiles: () => invoke<ProfileView[]>("list_profiles"),
@@ -122,7 +129,40 @@ export const api = {
   auditExport: (format: "csv" | "xlsx") => invoke<ExportResult>("audit_export", { format }),
   reportData: () => invoke<ReportData>("report_data"),
   reportSaveHtml: (html: string) => invoke<ExportResult>("report_save_html", { html }),
+  // ---- sharing (LAN dashboard, MQTT telemetry): telemetry out, nothing in ----
+  lanInterfaces: () => invoke<LanInterfaces>("lan_interfaces"),
+  lanStart: (ip: string, port: number) => invoke<LanStatus>("lan_start", { req: { ip, port } }),
+  lanStop: () => invoke<LanStatus>("lan_stop"),
+  lanStatus: () => invoke<LanStatus>("lan_status"),
+  mqttGet: () => invoke<MqttView>("mqtt_get"),
+  mqttStatus: () => invoke<MqttStatus>("mqtt_status"),
+  mqttSave: (config: MqttConfig) => invoke<MqttConfig>("mqtt_save_config", { config }),
+  mqttSetPassword: (password: string) => invoke<void>("mqtt_set_password", { password }),
+  mqttClearPassword: () => invoke<void>("mqtt_clear_password"),
+  mqttTest: (config: MqttConfig, password: string | null) => invoke<MqttTestReport>("mqtt_test", { config, password }),
+  mqttStart: () => invoke<MqttStatus>("mqtt_start"),
+  mqttStop: () => invoke<MqttStatus>("mqtt_stop"),
 };
+
+/**
+ * The browser (LAN) build: snapshot and trend over GET, nothing else. Every other call is
+ * refused here, so a LAN page cannot even attempt a connect, arm, control or export action.
+ */
+const lanApi: typeof tauriApi = new Proxy(
+  {
+    snapshot: lanSnapshot,
+    trend: lanTrend,
+    listProfiles: () => lanSnapshot().then((s) => s.profiles),
+  } as unknown as typeof tauriApi,
+  {
+    get(target, key) {
+      if (key in target) return (target as unknown as Record<PropertyKey, unknown>)[key];
+      return () => Promise.reject(new Error("read-only view"));
+    },
+  },
+);
+
+export const api: typeof tauriApi = isLan() ? lanApi : tauriApi;
 
 /** A control panel request: a profile command, or a read_write register by ID, in engineering units. */
 export type PanelRequest =

@@ -4,6 +4,7 @@
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import { api, errorText } from "../api.ts";
+import { nowMs } from "../clock.ts";
 import { clear, h } from "../dom.ts";
 import { fmtLocalTime, fmtNumber, fmtUtc } from "../format.ts";
 import { lang, t, tx } from "../i18n.ts";
@@ -123,7 +124,7 @@ export function trendsView(params: { device?: string } = {}): View {
   }
 
   function bounds(): { from: number; to: number } {
-    const now = Date.now();
+    const now = nowMs();
     if (range in LIVE) {
       // Auto-fit from the first buffered point of the selected tags, capped at the chosen window.
       const first = firstPointMs(tagRefs().map((tg) => store.buffers.get(tg.key)));
@@ -309,7 +310,7 @@ export function trendsView(params: { device?: string } = {}): View {
 
   async function draw(force = false) {
     if (!charts.length) return;
-    const now = Date.now();
+    const now = nowMs();
     if (!force && now - lastDraw < REFRESH_MS) {
       if (!pending) {
         pending = true;

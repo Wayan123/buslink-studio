@@ -10,9 +10,28 @@ license.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["rt", "net", "time", "macros", "io-util"] }
+# LAN dashboard (lan/) and MQTT telemetry (mqtt/). rustls uses the ring provider only.
+axum = { version = "=0.8.9", default-features = false, features = ["http1", "ws", "query", "tokio"] }
+hyper = { version = "=1.12.0", default-features = false, features = ["server", "http1"] }
+hyper-util = { version = "=0.1.21", default-features = false, features = ["tokio", "service"] }
+tokio-rustls = { version = "=0.26.6", default-features = false, features = ["ring", "tls12"] }
+rustls = { version = "=0.23.40", default-features = false, features = ["ring", "std", "tls12"] }
+rcgen = { version = "=0.14.10", default-features = false, features = ["crypto", "ring", "pem"] }
+ring = "=0.17.14"
+rumqttc = { version = "=0.25.1", default-features = false, features = ["use-rustls-no-provider"] }
+if-addrs = "=0.15.0"
+qrcode = { version = "=0.14.1", default-features = false }
+futures-util = { version = "=0.3.34", default-features = false, features = ["std", "sink"] }
+bytes = "=1.12.1"
 rusqlite.workspace = true
 rust_xlsxwriter.workspace = true
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+rustls-native-certs = "=0.8.5"
+
+[target.'cfg(target_os = "android")'.dependencies]
+rustls-platform-verifier = "=0.7.1"
 
 [lints]
 workspace = true
@@ -20,3 +39,6 @@ workspace = true
 [dev-dependencies]
 # Already in the tree through rust_xlsxwriter; used only to inspect exported workbooks.
 zip = { version = "=9.5.1", default-features = false, features = ["deflate"] }
+# LAN and MQTT integration tests: a pinned-certificate TLS client and a WebSocket client.
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "net", "io-util"] }
+tokio-tungstenite = { version = "=0.29.0", default-features = false, features = ["handshake"] }

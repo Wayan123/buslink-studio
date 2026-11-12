@@ -553,3 +553,92 @@ export interface ReportData {
   audit: AuditRow[];
   events: EventRow[];
 }
+
+// ---- sharing: LAN dashboard and MQTT (lan-mqtt) ----
+
+export interface LanInterface {
+  name: string;
+  ip: string;
+}
+
+export interface LanInterfaces {
+  interfaces: LanInterface[];
+  default_port: number;
+}
+
+export interface LanClient {
+  id: number;
+  addr: string;
+  since_ms: number;
+}
+
+export interface LanDetails {
+  ip: string;
+  port: number;
+  /** Contains the token: shown on the host device only. */
+  url: string;
+  fingerprint: string;
+  started_ms: number;
+  clients: LanClient[];
+  max_clients: number;
+  max_connections: number;
+  rejected: number;
+  rate_limited: number;
+  refused_connections: number;
+  refused_clients: number;
+  qr: { size: number; rows: string[] } | null;
+}
+
+export interface LanStatus {
+  running: boolean;
+  details: LanDetails | null;
+}
+
+export interface MqttConfig {
+  broker_url: string;
+  site: string;
+  gateway: string;
+  client_id: string;
+  username: string;
+  ca_pem: string;
+  allow_insecure: boolean;
+  expiry_s: number;
+  keep_alive_s: number;
+  outbox_max: number;
+  min_interval_ms: number;
+}
+
+export type MqttState = "off" | "connecting" | "online" | "backoff";
+
+export interface MqttStatus {
+  state: MqttState;
+  broker: string;
+  client_id: string;
+  outbox_depth: number;
+  outbox_max: number;
+  enqueued: number;
+  published: number;
+  dropped_overflow: number;
+  expired: number;
+  throttled: number;
+  lagged: number;
+  rejected: number;
+  in_flight: number;
+  reconnects: number;
+  last_error: string | null;
+  last_ack_ms: number | null;
+}
+
+export interface MqttView {
+  config: MqttConfig;
+  has_password: boolean;
+  secret_store: string;
+  secret_persistent: boolean;
+  status: MqttStatus;
+}
+
+export interface MqttTestReport {
+  ok: boolean;
+  detail: string;
+  elapsed_ms: number;
+}

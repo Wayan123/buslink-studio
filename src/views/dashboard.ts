@@ -1,10 +1,12 @@
 // Live dashboard (dashboard-ui Req 3): L1 overview of all devices (worst state first) and the
 // L2 device page (route #/device/<id>). Tiles update in place; ages tick once per second.
 import { api, errorText } from "../api.ts";
+import { nowMs } from "../clock.ts";
 import { linkStateBadge, priorityBadge, qualityBadge, simulatedBanner } from "../components/badges.ts";
 import { Tile } from "../components/tile.ts";
 import { append, clear, h, setText } from "../dom.ts";
 import { fmtAge } from "../format.ts";
+import { isLan } from "../lan.ts";
 import { lang, t, tx } from "../i18n.ts";
 import { loadProfiles, profileOf } from "../profiles.ts";
 import { displayQuality } from "../quality.ts";
@@ -76,12 +78,16 @@ export function dashboardView(params: { device?: string } = {}): View {
     cardsBox.classList.toggle("compact", on);
     densityBtn.setAttribute("aria-pressed", String(on));
   });
-  const empty = h(
-    "div",
-    { class: "card empty" },
-    h("p", null, t("dash.empty")),
-    h("p", null, h("a", { href: "#/connect", class: "button primary" }, t("dash.empty.action"))),
-  );
+  const lan = isLan();
+  // The browser view cannot connect anything: it only says there is nothing to show yet.
+  const empty = lan
+    ? h("div", { class: "card empty" }, h("p", null, t("lan.empty")))
+    : h(
+        "div",
+        { class: "card empty" },
+        h("p", null, t("dash.empty")),
+        h("p", null, h("a", { href: "#/connect", class: "button primary" }, t("dash.empty.action"))),
+      );
 
   function selected(): { device: DeviceView; link: LinkView }[] {
     const all = store.devices();
@@ -142,12 +148,12 @@ export function dashboardView(params: { device?: string } = {}): View {
         "nav",
         { class: "head-links", "aria-label": t("dash.device_links") },
         h("a", { href: `#/trends/${encodeURIComponent(device.id)}`, "data-fk": "trends" }, t("nav.trends")),
-        h("a", { href: `#/inspector/${encodeURIComponent(device.id)}`, "data-fk": "inspector" }, t("nav.inspector")),
-        // Control panel only for simulated devices on a simulator link (safety rule 8).
-        link.simulated && profile?.simulated_only
+        lan ? null : h("a", { href: `#/inspector/${encodeURIComponent(device.id)}`, "data-fk": "inspector" }, t("nav.inspector")),
+        // Control panel only for simulated devices on a simulator link (safety rule 8); never in the browser view.
+        !lan && link.simulated && profile?.simulated_only
           ? h("a", { href: `#/control/${encodeURIComponent(device.id)}`, "data-fk": "control", "data-testid": `control-${device.id}` }, t("nav.control"))
           : null,
-        profile?.capabilities?.comm_config && profile.capabilities.comm_config !== "unsupported"
+        !lan && profile?.capabilities?.comm_config && profile.capabilities.comm_config !== "unsupported"
           ? h("a", { href: `#/commission/${encodeURIComponent(device.id)}`, "data-fk": "commission" }, t("nav.commission"))
           : null,
       ),
@@ -195,7 +201,7 @@ export function dashboardView(params: { device?: string } = {}): View {
   }
 
   function renderAll() {
-    const now = Date.now();
+    const now = nowMs();
     const sel = selected();
     empty.hidden = sel.length > 0;
     for (const { device, link } of sel) updateCard(device, link, null, now);
@@ -204,7 +210,7 @@ export function dashboardView(params: { device?: string } = {}): View {
 
   const unsub = store.subscribe((c) => {
     if (paused) return;
-    const now = Date.now();
+    const now = nowMs();
     if (c.links || c.alarms) {
       renderAll();
       return;
@@ -216,7 +222,7 @@ export function dashboardView(params: { device?: string } = {}): View {
 
   const timer = window.setInterval(() => {
     if (paused) return;
-    const now = Date.now();
+    const now = nowMs();
     for (const c of cards.values()) for (const tile of c.tiles.values()) tile.tick(now);
   }, 1000);
 
@@ -250,7 +256,7 @@ export function dashboardView(params: { device?: string } = {}): View {
     summary,
     empty,
     cardsBox,
-    exportBar(),
+    lan ? null : exportBar(),
   );
   void loadProfiles()
     .then(() => {

@@ -2,6 +2,7 @@
 // acknowledge / shelve / out of service, add alarm with research/02 default deadbands, alarm log.
 import { api, errorText } from "../api.ts";
 import { alarmStateBadge, priorityBadge } from "../components/badges.ts";
+import { isLan } from "../lan.ts";
 import { clear, h } from "../dom.ts";
 import { fmtLocalDateTime, fmtLocalTime, fmtNumber } from "../format.ts";
 import { lang, t, tx } from "../i18n.ts";
@@ -12,7 +13,10 @@ import { field, preserveFocus, select, statusLine, type View } from "./view.ts";
 
 /** Header banner: count per priority, oldest unacknowledged, flood indicator. */
 export function alarmBanner(): HTMLElement {
-  const el = h("a", { class: "alarm-banner", href: "#/alarms", "aria-label": t("alarm.banner.label") });
+  // In the browser (LAN) view the banner only reports; the alarm list with acknowledge and shelve is not served.
+  const el = isLan()
+    ? h("div", { class: "alarm-banner", role: "group", "aria-label": t("alarm.banner.label") })
+    : h("a", { class: "alarm-banner", href: "#/alarms", "aria-label": t("alarm.banner.label") });
   const render = () => {
     const s = store.alarms.summary;
     clear(el);

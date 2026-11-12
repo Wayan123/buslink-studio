@@ -75,3 +75,36 @@ Date: 2026-11-13. Same machine and method (`node scripts/verify-control.mjs` aga
 Journey 1 (`verify-journey.mjs`) was re-run after these changes: 15/15.
 
 Not verified: the commissioning wizard in the UI (covered by core tests J3 only), the WebView print dialog itself (the PDF came from CDP), the `app_background` disarm on Android, any real device.
+
+
+# Verification: lan-mqtt (E7), PRD journey 3
+
+Date: 2026-11-13. Same machine and method as above (`node scripts/verify-lan.mjs`, Windows node, puppeteer-core): the e2e build runs Training mode, shares the LAN view on this PC's private address `192.168.100.77:8443`, and a second headless Chrome with its own profile plays the colleague's browser. **Simulated devices only; not hardware evidence, and not a test from a second physical device.** Results: `lan-results.json` (33/33 passed). In the screenshots of the host app the link and QR code are blurred with CSS on purpose (a LAN token is a secret).
+
+| Check | Result |
+|---|---|
+| Sharing is off at start: no link, no header indicator; interface list has private addresses only; default port 8443 | pass (`30-share-off.png`) |
+| Link is `https://<ip>:8443/?t=<32 hex>`; QR drawn; SHA-256 fingerprint shown; header indicator on; the "off" form is hidden | pass (`31-share-on.png`) |
+| Browser gets the read-only build: 3 devices GOOD, "Simulated device" banners, quality and age on tiles, live stream connected | pass (`32-lan-dashboard.png`) |
+| Navigation is overview + trends; buttons are only "Pause live updates" and "Compact tiles"; no connect/arm/write/export element | pass |
+| Cookie is Secure, HttpOnly, SameSite=Strict; POST/PUT/DELETE give 405/400; unknown route 404; no token or wrong token 401 | pass (`33-lan-no-token.png`) |
+| The app lists the viewer | pass (`34-share-viewer.png`) |
+| TIMEOUT injected on the host shows in the browser as `TIMEOUT · n s` with the last value struck through; the alarm banner is display only | pass (`35-lan-timeout.png`) |
+| Browser trend shows "No data: TIMEOUT"; the 1 h range is fetched from `GET /api/trend` | pass (`36-lan-trend-gap.png`) |
+| 360 px: no horizontal scroll | pass (`37-lan-360px.png`) |
+| Stop sharing: the browser stream says reconnecting, the port refuses connections, the indicator disappears; restart gives a new token and the old link gets 401 | pass (`38-lan-after-stop.png`) |
+
+The first run of this script found that the host's asset resolver answered unknown paths like `/api/command` with `index.html` (200). The server now answers 404 for `api/…` and the shell refuses HTML fallbacks (test `unknown_api_paths_stay_404_when_assets_fall_back_to_index`). A later screenshot showed the "Sharing is off" form still visible while sharing was on (a CSS `display` rule beat `hidden`); fixed and now asserted.
+
+## Rust tests (WSL)
+
+`cargo test --workspace` passes, including `lan_server` (L1, L3, L5, L6, limits, origin, 404 fallback), `mqtt_broker` (M4–M6, throttle, expiry, overflow, lost PUBACK, TLS), and unit tests L2, L4, L7, M1–M3, M7. MQTT journey 5 is covered by the in-process broker test, not by a headless browser run and not against a real broker.
+
+## Not verified
+
+- Android: no APK built, no phone run; Keystore and platform-verifier wiring are not done (see `docs/android-build.md`).
+- A real MQTT broker (Mosquitto, EMQX, a cloud broker) and TLS roots from the Windows store: the tests use an in-process broker and a pasted CA. `test_connection` against a public broker was not run.
+- Windows Credential Manager: it compiles and is wired, but no password was stored and read back in this run.
+- A second physical device on the Wi-Fi; browsers other than Chrome; Safari/iOS handling of the self-signed certificate.
+- Firewall prompts on first listen (Windows Defender Firewall may ask for permission).
+- Load: 8 WebSocket viewers at once and long runs were not measured.

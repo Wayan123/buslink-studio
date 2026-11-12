@@ -14,6 +14,8 @@ pub mod command;
 pub mod device;
 pub mod export;
 pub mod historian;
+pub mod lan;
+pub mod mqtt;
 pub mod poll;
 pub mod profile;
 pub mod protocol;

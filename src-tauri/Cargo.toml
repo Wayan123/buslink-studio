@@ -30,6 +30,8 @@ buslink-sim = { path = "../crates/buslink-sim" }
 tauri-plugin-dialog = "=2.8.4"
 
 [target.'cfg(windows)'.dependencies]
+# Windows Credential Manager for the MQTT password (safety rule 14).
+keyring = { version = "=3.6.3", default-features = false, features = ["windows-native"] }
 serialport = { version = "=4.10.1", default-features = false }
 
 [features]

@@ -14,6 +14,25 @@ BusLink Studio is Apache-2.0. It uses the libraries below as dependencies under 
 | SQLite (bundled by `libsqlite3-sys` 0.40.0) | 3.x | Public domain | Historian database engine |
 | rust_xlsxwriter | 0.102.0 (default features off) | MIT OR Apache-2.0 | XLSX export |
 
+Added by lan-mqtt (LAN dashboard and MQTT telemetry):
+
+| Crate | Version | License | Used for |
+|---|---|---|---|
+| axum | 0.8.9 | MIT | Read-only HTTP + WebSocket server |
+| hyper, hyper-util | 1.12.0, 0.1.21 | MIT | HTTP/1.1 connections |
+| tokio-rustls, rustls (ring provider) | 0.26.6, 0.23.40 | MIT OR Apache-2.0 (rustls: Apache-2.0 OR ISC OR MIT) | TLS for the LAN server and the MQTT client |
+| ring | 0.17.14 | ISC-style (ring license) | Random token, SHA-256 fingerprint, crypto provider |
+| rcgen | 0.14.10 | MIT OR Apache-2.0 | Per-session self-signed certificate |
+| rumqttc | 0.25.1 (`use-rustls-no-provider`) | Apache-2.0 | MQTT 5 client |
+| rustls-native-certs | 0.8.5 (not Android) | Apache-2.0 OR ISC OR MIT | System trust roots for the broker |
+| rustls-platform-verifier | 0.7.1 (Android only) | MIT OR Apache-2.0 | System trust store on Android (not built into an APK yet) |
+| if-addrs | 0.15.0 | MIT OR BSD-3-Clause | List private network addresses |
+| qrcode | 0.14.1 (default features off) | MIT OR Apache-2.0 | QR code of the LAN link |
+| futures-util, bytes | 0.3.34, 1.12.1 | MIT OR Apache-2.0 | WebSocket plumbing |
+| keyring (`src-tauri`, Windows only) | 3.6.3 (`windows-native`) | MIT OR Apache-2.0 | Windows Credential Manager for the MQTT password |
+
+Dev-only additions: `tokio-tungstenite` 0.29.0 (MIT), a WebSocket client for the LAN tests. The MQTT test broker is written on rumqttc's packet codec.
+
 Dev-only: `zip` 9.5.1 (MIT), already a dependency of rust_xlsxwriter, used by tests to inspect exported workbooks.
 
 ## Transitive dependencies

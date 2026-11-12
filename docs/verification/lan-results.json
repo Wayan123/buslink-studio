@@ -1,0 +1,193 @@
+{
+  "date": "2026-11-12T14:47:09.025Z",
+  "platform": "Windows (WebView2 in the e2e build) + a second headless Chrome as the LAN browser",
+  "steps": [
+    {
+      "name": "connect to the app over CDP",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "Training mode: 3 simulated devices GOOD in the app",
+      "ok": true,
+      "detail": "bgt-smps-8in1-u1, sim-vfd-basic-u2, sim-temp-controller-basic-u3"
+    },
+    {
+      "name": "sharing is off at start: no link, no header indicator",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "interface list offers private addresses only",
+      "ok": true,
+      "detail": "192.168.100.77, 172.18.80.1, 172.21.48.1, 127.0.0.1"
+    },
+    {
+      "name": "default port is 8443",
+      "ok": true,
+      "detail": "8443"
+    },
+    {
+      "name": "link is https://<ip>:8443/?t=<128-bit hex token>",
+      "ok": true,
+      "detail": "https://192.168.100.77:8443/?t=<token>"
+    },
+    {
+      "name": "QR code is drawn",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "the 'Sharing is off' form is not visible while sharing is on",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "certificate fingerprint is shown (SHA-256)",
+      "ok": true,
+      "detail": "96:6C:81:2F:BE:F5:AC:53:7E:2E:A8:2E:26:28:7D:22:12:CC:0B:20:B9:EF:88:41:49:7F:B4:8C:5D:05:27:1F"
+    },
+    {
+      "name": "header shows that the network view is on",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "server selects the read-only build (meta buslink-mode=lan)",
+      "ok": true,
+      "detail": "{\"meta\":\"lan\",\"body\":true,\"title\":\"Overview · BusLink Studio\"}"
+    },
+    {
+      "name": "LAN browser shows the 3 devices with GOOD tiles",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "live stream connected",
+      "ok": true,
+      "detail": "Live stream connected."
+    },
+    {
+      "name": "read-only notice is shown",
+      "ok": true,
+      "detail": "Read-only view. You can watch live values and trends; nothing can be connected, changed or exported from here."
+    },
+    {
+      "name": "every device card still says 'Simulated device'",
+      "ok": true,
+      "detail": "3 banners"
+    },
+    {
+      "name": "tiles carry value, unit, quality and age",
+      "ok": true,
+      "detail": "Process temperature (PV)25.0 °C-50300age 515 ms · cycle 1 s"
+    },
+    {
+      "name": "navigation is overview + trends only",
+      "ok": true,
+      "detail": "#/dashboard, #/trends"
+    },
+    {
+      "name": "no connect, arm, write or export controls in the DOM",
+      "ok": true,
+      "detail": "buttons: Pause live updates | Compact tiles"
+    },
+    {
+      "name": "session cookie is Secure, HttpOnly, SameSite=Strict",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "browser probes: GET with cookie 200; POST/PUT/DELETE never 2xx; unknown routes 404",
+      "ok": true,
+      "detail": "{\"GET /api/snapshot (cookie only)\":200,\"POST /api/snapshot\":405,\"POST /api/write\":400,\"PUT /api/stream\":405,\"DELETE /\":405,\"GET /api/command\":404}"
+    },
+    {
+      "name": "no token / wrong token: 401",
+      "ok": true,
+      "detail": "401, 401"
+    },
+    {
+      "name": "the app lists the connected viewer",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "TIMEOUT on the host shows in the browser with the quality badge",
+      "ok": true,
+      "detail": "TIMEOUT · 2 s"
+    },
+    {
+      "name": "communication alarm count is in the browser banner (display only)",
+      "ok": true,
+      "detail": "102030"
+    },
+    {
+      "name": "the banner is not a link to the alarm list",
+      "ok": true,
+      "detail": "DIV"
+    },
+    {
+      "name": "browser trend shows the gap 'No data: TIMEOUT'",
+      "ok": true,
+      "detail": "Simulated temperature controller (simulated): Process temperature (PV) — No data: TIMEOUT · 21:47:13–21:47:15 | Simulated temperature controller (simulated): Setpoint (SP) — No data: TIMEOUT · 21:47:13–21:47:15"
+    },
+    {
+      "name": "1 h history comes from GET /api/trend (decimated on the host)",
+      "ok": true,
+      "detail": "https://192.168.100.77:8443/api/trend?tag=sim-temp-controller-basic-u3%2Fpv&from=1794491235359&to=1794494835359&buckets=942&t=<token>"
+    },
+    {
+      "name": "LAN view at 360 px: no horizontal page scroll",
+      "ok": true,
+      "detail": "overflow 0px"
+    },
+    {
+      "name": "Stop sharing closes the browser's stream (it says 'reconnecting')",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "the port refuses new connections after Stop",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "the app shows sharing off again and the header indicator is gone",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "restart issues a new token",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "the old link answers 401 after the restart",
+      "ok": true,
+      "detail": "401"
+    }
+  ],
+  "interfaces": [
+    "Wi-Fi — 192.168.100.77",
+    "vEthernet (Default Switch) — 172.18.80.1",
+    "vEthernet (WSL (Hyper-V firewall)) — 172.21.48.1",
+    "loopback (verification build) — 127.0.0.1"
+  ],
+  "lan_buttons": [
+    "Pause live updates",
+    "Compact tiles"
+  ],
+  "probes": {
+    "GET /api/snapshot (cookie only)": 200,
+    "POST /api/snapshot": 405,
+    "POST /api/write": 400,
+    "PUT /api/stream": 405,
+    "DELETE /": 405,
+    "GET /api/command": 404
+  },
+  "summary": {
+    "passed": 33,
+    "failed": 0
+  }
+}

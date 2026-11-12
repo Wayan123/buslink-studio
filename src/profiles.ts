@@ -1,6 +1,6 @@
 // Profile cache (profiles are bundled and do not change while the app runs).
 import { api } from "./api.ts";
-import type { DeviceView, Profile, Register } from "./types.ts";
+import type { DeviceView, Profile, ProfileView, Register } from "./types.ts";
 
 let cache: Promise<Map<string, Profile>> | null = null;
 let ready = new Map<string, Profile>();
@@ -16,6 +16,12 @@ export function loadProfiles(): Promise<Map<string, Profile>> {
     });
   }
   return cache;
+}
+
+/** LAN mode: profiles arrive inside the snapshot. */
+export function primeProfiles(list: ProfileView[]): void {
+  ready = new Map(list.map((p) => [p.key, p.profile]));
+  cache = Promise.resolve(ready);
 }
 
 export function profileOf(d: DeviceView): Profile | undefined {
