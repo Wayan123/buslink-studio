@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { test } from "node:test";
-import { backoffMs, LAN_NAV, LAN_ROUTES, lanToken, parseMessage, query } from "./lan.ts";
+import { backoffMs, LAN_NAV, LAN_ROUTES, parseMessage, query } from "./lan.ts";
 import { clockOffsetMs, nowMs, syncServerTime } from "./clock.ts";
 
 test("the browser nav and routes are the read-only views only", () => {
@@ -27,10 +27,10 @@ test("messages: only snapshot, frame and lagged with the right shape are accepte
   }
 });
 
-test("token comes from the query string; requests carry it as a parameter", () => {
-  assert.equal(lanToken("?t=abc123&x=1"), "abc123");
-  assert.equal(lanToken(""), "");
-  assert.equal(query("tok", { tag: "dev/t", from: 1 }), "?tag=dev%2Ft&from=1&t=tok");
+test("requests never carry the token in the URL (the session cookie authenticates)", () => {
+  assert.equal(query({ tag: "dev/t", from: 1 }), "?tag=dev%2Ft&from=1");
+  assert.equal(query(), "");
+  assert.ok(!/[?&]t=/.test(query({ tag: "dev/t" })));
 });
 
 test("reconnect backoff doubles up to 15 s", () => {

@@ -65,6 +65,7 @@ impl Session {
                     device: d.clone(),
                     link: e.config.clone(),
                     profile: Arc::clone(p),
+                    session_simulator: e.simulated && e.config.is_simulator(),
                 },
                 handle: w.handle(timeout),
                 generation: e.generation,

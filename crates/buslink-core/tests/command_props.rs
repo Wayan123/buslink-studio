@@ -69,6 +69,7 @@ fn target(file: &str, link: &LinkConfig, unit: u8) -> CommandTarget {
     d.unit_id = unit;
     CommandTarget {
         device: d,
+        session_simulator: link.is_simulator(),
         link: link.clone(),
         profile: p,
     }
@@ -777,4 +778,139 @@ fn c3_comm_config_rules() {
         assert!(svc.preview(&mut w.link(), cc(CommSettingKind::UnitId, 5)).is_err());
     }
     assert_eq!(w.write_frames().len(), 1);
+}
+
+// ---- security review 07, M1: the role is host state, not an IPC claim ----
+
+#[test]
+fn forged_role_in_the_arm_request_is_rejected() {
+    use buslink_core::command::control::ArmRequest;
+    let ok: ArmRequest = serde_json::from_str(r#"{"device_id":"vfd","user":"tech"}"#).unwrap();
+    assert_eq!((ok.device_id.as_str(), ok.user.as_str()), ("vfd", "tech"));
+    for forged in [
+        r#"{"device_id":"vfd","user":"tech","role":"commissioner"}"#,
+        r#"{"device_id":"vfd","user":"tech","role":"operator"}"#,
+        r#"{"device_id":"vfd","user":"tech","Role":"commissioner"}"#,
+    ] {
+        assert!(serde_json::from_str::<ArmRequest>(forged).is_err(), "{forged}");
+    }
+}
+
+#[test]
+fn user_names_are_trimmed_capped_and_free_of_control_characters() {
+    use buslink_core::command::control::validate_user;
+    assert_eq!(validate_user("  tech 1 ").unwrap(), "tech 1");
+    assert!(validate_user("   ").is_err());
+    assert!(validate_user(&"a".repeat(64)).is_ok());
+    assert!(validate_user(&"a".repeat(65)).is_err());
+    for bad in ["a\nb", "a\tb", "a\u{0}b", "\u{7f}x", "a\u{1b}[31m"] {
+        assert!(validate_user(bad).is_err(), "{bad:?}");
+    }
+}
+
+#[test]
+fn comm_config_needs_the_unlock_and_the_unlock_ends_with_the_arm() {
+    let mut w = World::new();
+    let audit = MemoryAudit::new();
+    let mut svc = service(&w, &audit);
+    let t = target("sim-vfd.json", &sim_link("sim"), 2);
+    let cc = |v| CommandRequest::CommConfig {
+        setting: CommSettingKind::UnitId,
+        value: v,
+    };
+    // Not armed: raising is refused.
+    assert_eq!(svc.raise_role(Role::Commissioner), Err(CommandError::NotArmed));
+    svc.arm(t.clone(), op(Role::Operator)).unwrap();
+    assert!(matches!(
+        svc.preview(&mut w.link(), cc(5)),
+        Err(CommandError::Role {
+            need: "commissioner",
+            ..
+        })
+    ));
+    svc.raise_role(Role::Commissioner).unwrap();
+    assert_eq!(svc.armed_operator().unwrap().role, Role::Commissioner);
+    let unlock = audit
+        .records()
+        .into_iter()
+        .filter(|r| r.event == Some(AuditEvent::RoleUnlock))
+        .collect::<Vec<_>>();
+    assert_eq!(unlock.len(), 1, "the unlock is audited");
+    assert_eq!(
+        (unlock[0].user.as_str(), unlock[0].role.as_str()),
+        ("tech1", "operator")
+    );
+    svc.preview(&mut w.link(), cc(5)).unwrap();
+    // Expiry drops it.
+    svc.cancel().unwrap();
+    w.clock.advance(60_001);
+    assert!(svc.expire_if_due());
+    assert!(svc.armed_operator().is_none());
+    // Every disarm reason drops it; the next arm starts as operator again.
+    for reason in [
+        DisarmReason::Disconnect,
+        DisarmReason::Reconnect,
+        DisarmReason::ProfileChange,
+        DisarmReason::AppBackground,
+    ] {
+        svc.arm(t.clone(), op(Role::Operator)).unwrap();
+        svc.raise_role(Role::Commissioner).unwrap();
+        svc.disarm(reason);
+        assert!(svc.armed_operator().is_none());
+        svc.arm(t.clone(), op(Role::Operator)).unwrap();
+        assert_eq!(svc.armed_operator().unwrap().role, Role::Operator);
+        assert!(svc.preview(&mut w.link(), cc(5)).is_err(), "{reason:?}");
+    }
+    // Fail closed: no audit row, no raise.
+    audit.set_failing(true);
+    assert!(svc.raise_role(Role::Commissioner).is_err());
+    assert_eq!(svc.armed_operator().unwrap().role, Role::Operator);
+    assert!(w.write_frames().is_empty());
+}
+
+// ---- security review 07, M2: simulated_only control only on the session's own simulator link ----
+
+#[test]
+fn simulated_only_control_needs_the_session_simulator_marker() {
+    let run = || CommandRequest::Named {
+        command: "run".into(),
+        value: None,
+    };
+    let mut w = World::new();
+    let audit = MemoryAudit::new();
+    let mut svc = service(&w, &audit);
+
+    // Training link (session-created simulator link): allowed.
+    let training = target("sim-vfd.json", &sim_link("training"), 2);
+    assert!(training.session_simulator);
+    svc.arm(training, op(Role::Operator)).unwrap();
+    svc.preview(&mut w.link(), run()).unwrap();
+    svc.preview(&mut w.link(), set("freq_setpoint", 10.0)).unwrap();
+    svc.disarm(DisarmReason::Operator);
+
+    // A user-entered loopback TCP link, a non-loopback TCP link and a simulator-kind
+    // link without the marker are monitor-only.
+    let mut unmarked = target("sim-vfd.json", &sim_link("lookalike"), 2);
+    unmarked.session_simulator = false;
+    let manual = [
+        target("sim-vfd.json", &tcp_link("manual", "127.0.0.1"), 2),
+        target("sim-vfd.json", &tcp_link("manual6", "::1"), 2),
+        target("sim-vfd.json", &tcp_link("manual-lh", "localhost"), 2),
+        target("sim-vfd.json", &tcp_link("remote", "192.168.1.10"), 2),
+        unmarked,
+    ];
+    for t in manual {
+        assert!(!t.session_simulator, "{:?}", t.link.kind);
+        svc.arm(t, op(Role::Operator)).unwrap();
+        assert!(matches!(
+            svc.preview(&mut w.link(), run()),
+            Err(CommandError::ControlNotAllowed(_))
+        ));
+        assert!(matches!(
+            svc.preview(&mut w.link(), set("freq_setpoint", 10.0)),
+            Err(CommandError::ControlNotAllowed(_))
+        ));
+        svc.disarm(DisarmReason::Operator);
+    }
+    assert!(w.write_frames().is_empty());
 }

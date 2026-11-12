@@ -121,10 +121,17 @@ async function main() {
     lanBrowser = await puppeteer.launch({ executablePath: CHROME, headless: true, acceptInsecureCerts: true, args: ["--no-sandbox"] });
     const lan = await lanBrowser.newPage();
     const responses = [];
-    lan.on("response", (r) => responses.push({ url: r.url().replace(/t=[0-9a-f]+/, "t=<token>"), status: r.status(), method: r.request().method() }));
+    lan.on("response", (r) => responses.push({ url: r.url().replace(/t=[0-9a-f]+/, "t=<token>"), tokenInUrl: /[?&]t=/.test(r.url()), status: r.status(), method: r.request().method(), location: r.headers().location ?? null }));
     await lan.setViewport({ width: 1280, height: 900 });
     await lan.goto(url, { waitUntil: "load", timeout: 20000 });
     await waitFor(lan, () => !!document.querySelector(".app-header"), 15000);
+    // Security review 07, L1: the token is read once on GET /, then replaced by a cookie and a redirect.
+    const entry = responses.filter((r) => r.tokenInUrl);
+    step("the token is in exactly one request: GET / answered 303 to /", entry.length === 1 && entry[0].status === 303 && entry[0].location === "/", JSON.stringify(entry));
+    const shownUrl = lan.url();
+    step("the address bar no longer holds the token", !/[?&]t=/.test(shownUrl) && new URL(shownUrl).pathname === "/", shownUrl);
+    const histLen = await lan.evaluate(() => ({ href: location.href, search: location.search, referrerHasToken: /[?&]t=/.test(document.referrer) }));
+    step("location.search and referrer are token-free", histLen.search === "" && !histLen.referrerHasToken, JSON.stringify(histLen));
     const mode = await lan.evaluate(() => ({
       meta: document.querySelector('meta[name="buslink-mode"]')?.getAttribute("content"),
       body: document.body.classList.contains("lan"),
@@ -150,6 +157,8 @@ async function main() {
     const tileText = await lan.evaluate((dev) => document.querySelector(`.device-card[data-device="${dev}"] .tile`)?.textContent ?? "", temp);
     step("tiles carry value, unit, quality and age", /GOOD|good|baik/i.test(tileText) || /\d/.test(tileText), tileText.replace(/\s+/g, " ").slice(0, 120));
     await lan.screenshot({ path: join(OUT, "32-lan-dashboard.png"), fullPage: true });
+    const tokenLater = responses.filter((r) => r.tokenInUrl).length;
+    step("the stream and API requests carried no token in their URLs", tokenLater === 1, `${tokenLater} request(s) with ?t=`);
 
     // --- nothing that connects, arms, controls or exports ---
     const ui = await lan.evaluate(() => ({
@@ -194,6 +203,10 @@ async function main() {
     const r1 = await anon.goto(base, { waitUntil: "load" });
     const r2 = await anon.goto(`${base}?t=${"0".repeat(32)}`, { waitUntil: "load" });
     step("no token / wrong token: 401", r1.status() === 401 && r2.status() === 401, `${r1.status()}, ${r2.status()}`);
+    const realToken = url.match(/t=([0-9a-f]{32})/)?.[1] ?? "";
+    const r3 = await anon.goto(`${base}api/snapshot?t=${realToken}`, { waitUntil: "load" });
+    const r4 = await anon.goto(`${base}assets/x.js?t=${realToken}`, { waitUntil: "load" });
+    step("the right token in the URL is refused on API and asset routes (cookie only)", r3.status() === 401 && r4.status() === 401, `${r3.status()}, ${r4.status()}`);
     await anon.screenshot({ path: join(OUT, "33-lan-no-token.png") });
     await ctx.close();
 

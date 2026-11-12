@@ -140,6 +140,17 @@ async function run() {
     step("countdown runs", counted !== armedText, `${armedText} → ${counted}`);
     await shot(page, "21-control-armed.png");
 
+    // Security review 07, M1: the role is host state. A forged role in the arm request is refused,
+    // and the host still holds "operator" for this arm.
+    const invoke = (cmd, args) => page.evaluate((c, a) => window.__TAURI_INTERNALS__.invoke(c, a).then((v) => ({ ok: v }), (e) => ({ err: String(e) })), cmd, args);
+    const forged = await invoke("control_arm", { req: { device_id: "x", user: "forger", role: "commissioner" } });
+    step("a forged role in the arm request over IPC is refused", !!forged.err && /unknown field|role/i.test(forged.err), forged.err ?? "accepted");
+    const hostRole = await invoke("control_status");
+    step("the host holds the operator role for this arm", hostRole.ok?.armed_role === "operator", String(hostRole.ok?.armed_role));
+    const longUser = await invoke("control_arm", { req: { device_id: "x", user: "u".repeat(65) } });
+    const ctlUser = await invoke("control_arm", { req: { device_id: "x", user: "a\nb" } });
+    step("user names over 64 characters or with control characters are refused by the host", !!longUser.err && !!ctlUser.err, `${longUser.err} | ${ctlUser.err}`);
+
     await page.click("[data-testid=cmd-run]");
     let d = await confirmDialog(page);
     step("run: confirm dialog opens with the safe choice focused", d.open && d.info.focus === "confirm-cancel", JSON.stringify(d.info));
@@ -252,8 +263,16 @@ async function run() {
     // Disconnect drops the arm; nothing resumes on reconnect.
     await page.evaluate((h) => (location.hash = h), vfdHref);
     await page.waitForSelector("[data-testid=arm], [data-testid=disarm]", { timeout: 8000 });
-    if (await page.$("[data-testid=arm]")) await page.click("[data-testid=arm]");
+    if (await page.$("[data-testid=disarm]")) {
+      await page.click("[data-testid=disarm]");
+      await waitFor(page, () => !!document.querySelector("[data-testid=arm]"), 5000);
+    }
+    // The role selector arms as operator, then calls the separate commissioner unlock.
+    await page.select("#arm-role", "commissioner");
+    await page.click("[data-testid=arm]");
     await waitFor(page, () => /Armed/.test(document.querySelector("[data-testid=arm-text]")?.textContent ?? ""), 5000);
+    const unlocked = await invoke("control_status");
+    step("the role selector unlocks commissioner as a separate, audited host action", unlocked.ok?.armed_role === "commissioner", String(unlocked.ok?.armed_role));
     await page.evaluate(() => (location.hash = "#/connect"));
     await sleep(800);
     const disc = await page.evaluateHandle(() => [...document.querySelectorAll("button")].find((b) => /^Disconnect$/.test(b.textContent ?? "")));
@@ -262,6 +281,8 @@ async function run() {
     await page.evaluate((h) => (location.hash = h), vfdHref);
     const dropped = await waitFor(page, () => /disconnected|stopped polling/.test(document.querySelector("[data-testid=disarm-reason]")?.textContent ?? ""), 6000);
     step("disconnect drops the arm and says so", dropped, await text(page, "[data-testid=disarm-reason]"));
+    const afterDisc = await invoke("control_status");
+    step("disconnect also drops the commissioner unlock", afterDisc.ok?.armed_role === null, String(afterDisc.ok?.armed_role));
     await shot(page, "28-disarmed-after-disconnect.png");
   } catch (e) {
     step("journey ran without an exception", false, String(e?.stack ?? e));

@@ -69,6 +69,7 @@ impl Rig {
         d.unit_id = unit;
         CommandTarget {
             device: d,
+            session_simulator: link.is_simulator(),
             link,
             profile: p,
         }

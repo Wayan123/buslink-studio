@@ -4,7 +4,7 @@
 import { api, errorText, hasBackend } from "../api.ts";
 import { simulatedBanner } from "../components/badges.ts";
 import { confirmCommand } from "../components/confirm.ts";
-import { ackKey } from "../control.ts";
+import { ackKey, cleanUser } from "../control.ts";
 import { append, clear, h, setText, svgShape } from "../dom.ts";
 import { fmtNumber } from "../format.ts";
 import { lang, t } from "../i18n.ts";
@@ -110,7 +110,7 @@ export function commissionView(params: { device?: string } = {}): View {
     startBtn.addEventListener("click", async () => {
       const setting = settingSel.value as CommSettingKind;
       const value = setting === "unit_id" ? Number(unitIn.value) : Number(baudSel.value);
-      const user = userIn.value.trim();
+      const user = cleanUser(userIn.value) ?? "";
       fUser.error(user ? null : t("ctl.err.user"));
       if (setting === "unit_id") fUnit.error(Number.isInteger(value) && value >= 1 && value <= 247 ? null : t("wiz.err.unit"));
       if (!user || (setting === "unit_id" && !(Number.isInteger(value) && value >= 1 && value <= 247))) return;
@@ -212,7 +212,11 @@ export function commissionView(params: { device?: string } = {}): View {
             if (!armed) {
               panel.append(
                 h("p", null, t("wiz.arm_hint", { s: Math.round(s.arm_timeout_ms / 1000) })),
-                btn("wiz.arm", "arm", () => void act(() => api.controlArm(device.id, w.user, "commissioner"))),
+                btn("wiz.arm", "arm", () => void act(async () => {
+                  // Two deliberate host actions: arm (operator), then the audited commissioner unlock.
+                  await api.controlArm(device.id, w.user);
+                  return api.commissionerUnlock(device.id);
+                })),
               );
             } else {
               panel.append(countdown, btn("wiz.preview", "preview", () => void sendOnce(w)));

@@ -130,6 +130,11 @@ pub struct CommandTarget {
     pub device: DeviceInstance,
     pub link: LinkConfig,
     pub profile: Arc<Profile>,
+    /// Marker set only by `Session::command_access`, for a link the session itself
+    /// created for the in-process training simulator (`Session::connect(.., true)`).
+    /// `simulated_only` profiles are controllable only when it is set. A TCP link,
+    /// even to a loopback address, never carries it (security review 07, M2).
+    pub session_simulator: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -717,6 +722,38 @@ impl CommandService {
         Ok(())
     }
 
+    /// Raise the armed operator to `Commissioner` (a separate, deliberate host action).
+    /// Audited before it takes effect (fail closed). The raise lives in the arm: any
+    /// disarm, expiry, reconnect or re-arm returns to `Operator`.
+    pub fn raise_role(&mut self, role: Role) -> Result<(), CommandError> {
+        if matches!(self.inner, Inner::Sent | Inner::ReadBack) {
+            return Err(CommandError::WrongState {
+                expected: "not executing",
+                actual: self.state(),
+            });
+        }
+        self.ensure_armed()?;
+        let Some(a) = &self.armed else {
+            return Err(CommandError::NotArmed);
+        };
+        let from = a.operator.role;
+        if role <= from {
+            return Ok(());
+        }
+        let mut rec = self.base_record(AuditEvent::RoleUnlock);
+        rec.note = Some(format!(
+            "role {} -> {} until the arm ends; single-user local app, the role is an interlock, not authentication",
+            from.as_str(),
+            role.as_str()
+        ));
+        self.audit.append(&rec)?;
+        if let Some(a) = &mut self.armed {
+            a.operator.role = role;
+        }
+        self.refresh();
+        Ok(())
+    }
+
     /// Drop arming (operator, disconnect, reconnect, profile change, app background).
     pub fn disarm(&mut self, reason: DisarmReason) {
         if self.armed.is_none() {
@@ -785,7 +822,7 @@ impl CommandService {
         let target = armed.target.clone();
         let role = armed.operator.role;
         let profile = &target.profile;
-        let simulator = target.link.is_simulator() || target.link.is_loopback_tcp();
+        let simulator = target.link.is_simulator() && target.session_simulator;
         if profile.simulated_only && !simulator {
             return Err(CommandError::ControlNotAllowed(
                 "simulated_only profiles are only written on a simulator link",

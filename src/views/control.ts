@@ -9,8 +9,9 @@ import { announce, append, clear, h, setText } from "../dom.ts";
 import { fmtAge, fmtLocalTime, fmtNumber } from "../format.ts";
 import { lang, t, tx } from "../i18n.ts";
 import { loadProfiles, profileOf } from "../profiles.ts";
+import { cleanUser } from "../control.ts";
 import { store } from "../store.ts";
-import type { ControlStatus, DeviceView, Profile, ProfileCommand, Role } from "../types.ts";
+import type { ControlStatus, DeviceView, Profile, ProfileCommand } from "../types.ts";
 import { field, preserveFocus, select, statusLine, type View } from "./view.ts";
 
 const POLL_MS = 500;
@@ -63,7 +64,12 @@ export function controlView(params: { device?: string } = {}): View {
   function devicePicker(): HTMLElement {
     const list = h("ul", { class: "link-list" });
     for (const { device, link } of store.devices()) {
-      if (!link.simulated || !profileOf(device)?.simulated_only) continue;
+      if (!profileOf(device)?.simulated_only) continue;
+      if (!link.simulated) {
+        // Only the Training simulator link controls simulated devices (security review 07, M2).
+        list.append(h("li", { class: "muted", "data-testid": "monitor-only" }, `${device.name}: ${t("ctl.monitor_only")}`));
+        continue;
+      }
       list.append(h("li", null, h("a", { href: `#/control/${encodeURIComponent(device.id)}` }, device.name)));
     }
     if (!list.childElementCount) list.append(h("li", { class: "muted" }, t("ctl.none_available")));
@@ -92,7 +98,7 @@ export function controlView(params: { device?: string } = {}): View {
     const disarmBtn = h("button", { type: "button", class: "big", "data-testid": "disarm" }, t("ctl.disarm"));
     const armText = h("p", { class: "arm-text", "data-testid": "arm-text" });
     armBtn.addEventListener("click", async () => {
-      const u = userIn.value.trim();
+      const u = cleanUser(userIn.value);
       if (!u) {
         userField.error(t("ctl.err.user"));
         userIn.focus();
@@ -101,8 +107,14 @@ export function controlView(params: { device?: string } = {}): View {
       userField.error(null);
       saveUser(u);
       try {
-        render(await api.controlArm(device.id, u, roleSel.value as Role));
+        let st = await api.controlArm(device.id, u);
         announce(t("ctl.announce.armed", { device: device.name }));
+        if (roleSel.value === "commissioner") {
+          // Separate, audited host action; it ends with this arm.
+          st = await api.commissionerUnlock(device.id);
+          announce(t("ctl.announce.unlocked", { device: device.name }));
+        }
+        render(st);
       } catch (e) {
         status.set(errorText(e), "error");
       }

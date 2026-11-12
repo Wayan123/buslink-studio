@@ -15,7 +15,8 @@ pub mod tls;
 pub mod token;
 
 use crate::bus::BusSubscriber;
-use crate::profile::Profile;
+use crate::codec::TypeName;
+use crate::profile::{Profile, SupportLevel, Text};
 use crate::session::{LiveSnapshot, Session};
 use crate::trend::TrendSeries;
 use limits::{LimitConfig, Limiter};
@@ -119,10 +120,72 @@ impl AssetSource for MapAssets {
     }
 }
 
+/// One register as a browser needs it to draw a tile, a bar and a trend: nothing about
+/// how to reach the device (no address, word order or write bounds).
+#[derive(Serialize)]
+pub struct LanRegister {
+    pub id: String,
+    pub name: Text,
+    #[serde(rename = "type")]
+    pub type_name: TypeName,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unit: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub scale: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decimals: Option<u8>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub valid_range: Option<[f64; 2]>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_range: Option<[f64; 2]>,
+}
+
+/// The display subset of a profile sent to LAN viewers (security review 07, L2).
+/// It leaves out `source` (document URLs), `evidence` (log and video paths), register
+/// maps for the wire, write specs, commands and comm_config. Alarm limits are not part of
+/// a profile; they travel in the snapshot's `alarms`.
+#[derive(Serialize)]
+pub struct LanProfile {
+    pub profile_id: String,
+    pub profile_version: String,
+    pub vendor: Text,
+    pub model: Text,
+    pub support_level: SupportLevel,
+    pub simulated_only: bool,
+    pub registers: Vec<LanRegister>,
+}
+
+impl LanProfile {
+    pub fn of(p: &Profile) -> Self {
+        Self {
+            profile_id: p.profile_id.clone(),
+            profile_version: p.profile_version.clone(),
+            vendor: p.vendor.clone(),
+            model: p.model.clone(),
+            support_level: p.support_level,
+            simulated_only: p.simulated_only,
+            registers: p
+                .registers
+                .iter()
+                .map(|r| LanRegister {
+                    id: r.id.clone(),
+                    name: r.name.clone(),
+                    type_name: r.type_name,
+                    unit: r.unit.clone(),
+                    scale: r.scale,
+                    decimals: r.decimals,
+                    valid_range: r.valid_range,
+                    display_range: r.display_range,
+                })
+                .collect(),
+        }
+    }
+}
+
 #[derive(Serialize)]
 pub struct ProfileEntry {
     pub key: String,
-    pub profile: Profile,
+    pub profile: LanProfile,
 }
 
 /// `GET /api/snapshot` and the first WebSocket message. Profiles ride along so the
@@ -141,6 +204,10 @@ pub struct LanConfig {
     /// Tests and the e2e build only; the UI never offers loopback.
     pub allow_loopback: bool,
     pub max_connections: usize,
+    /// Open connections from one address (default 4).
+    pub max_connections_per_ip: usize,
+    /// Open connections that have not yet sent a valid token (default a quarter of `max_connections`).
+    pub max_unauthenticated: usize,
     pub max_clients: usize,
     pub limits: LimitConfig,
 }
@@ -152,6 +219,8 @@ impl LanConfig {
             port,
             allow_loopback: false,
             max_connections: 32,
+            max_connections_per_ip: 4,
+            max_unauthenticated: 8,
             max_clients: 8,
             limits: LimitConfig::default(),
         }
@@ -248,7 +317,11 @@ impl LanServer {
             listener,
             acceptor,
             Arc::clone(&ctx),
-            cfg.max_connections,
+            limits::ConnLimits {
+                max_total: cfg.max_connections.max(1),
+                per_ip: cfg.max_connections_per_ip.max(1),
+                max_unauthenticated: cfg.max_unauthenticated.max(1),
+            },
             shutdown_rx,
         ));
         Ok(LanServer {
@@ -277,6 +350,8 @@ impl LanServer {
     }
 
     pub fn url(&self) -> String {
+        // The token is accepted only on `GET /`, which answers with a cookie and a redirect
+        // to `/`, so it does not stay in the address bar, history or proxy logs.
         format!("https://{}:{}/?t={}", self.addr.ip(), self.addr.port(), self.token)
     }
 

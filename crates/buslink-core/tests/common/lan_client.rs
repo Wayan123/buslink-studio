@@ -172,11 +172,21 @@ fn dechunk(mut b: &[u8]) -> Vec<u8> {
 
 pub type Ws = tokio_tungstenite::WebSocketStream<TlsStream<TcpStream>>;
 
-/// Open `/api/stream`; `Err(status)` when the server refuses the upgrade.
-pub async fn ws_connect(addr: SocketAddr, fp: &str, query: &str, origin: Option<&str>) -> Result<Ws, u16> {
+/// Open `/api/stream`; `Err(status)` when the server refuses the upgrade. `cookie_token` is
+/// sent as the `bl_t` session cookie; `query` is appended to the URL (the server ignores a token there).
+pub async fn ws_connect(
+    addr: SocketAddr,
+    fp: &str,
+    query: &str,
+    cookie_token: Option<&str>,
+    origin: Option<&str>,
+) -> Result<Ws, u16> {
     use tokio_tungstenite::tungstenite::client::IntoClientRequest;
     let tls = tls_connect(addr, fp).await.map_err(|_| 0u16)?;
     let mut req = format!("wss://{addr}/api/stream{query}").into_client_request().unwrap();
+    if let Some(t) = cookie_token {
+        req.headers_mut().insert("cookie", format!("bl_t={t}").parse().unwrap());
+    }
     if let Some(o) = origin {
         req.headers_mut().insert("origin", o.parse().unwrap());
     }

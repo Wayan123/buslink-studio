@@ -9,7 +9,7 @@ Decisions recorded while writing this spec:
 - The LAN view serves the L1 overview and L3 trends only. The alarm list has acknowledge and shelve buttons, and the register inspector needs a device query, so neither is in the LAN build. The alarm banner (counts) is shown because it is display only.
 - The four routes of the request are the only routes. Profile ranges for the analog bars travel inside the `/api/snapshot` response (`profiles` key), not on a fifth route.
 - `/api/stream` carries the same `TagView`/`TrendPoint` records the desktop webview gets, built from the same sample bus.
-- Static assets are protected by the token too: `GET /?t=…` sets a `Secure; HttpOnly; SameSite=Strict` cookie so the browser can load `/assets/*` without the token in every URL.
+- Static assets are protected by the token too: `GET /?t=…` (the only place a URL token is accepted) sets a `Secure; HttpOnly; SameSite=Strict` cookie and answers 303 to `/`, so the token does not stay in the address bar; every other route, including the WebSocket, accepts the cookie only (security review 07, L1).
 - The embedded test broker is written on rumqttc's MQTT 5 packet codec instead of rumqttd: the tests must cut the connection, withhold acknowledgements and inspect every packet the client sends (no SUBSCRIBE), which a stock broker does not allow.
 
 ## Requirement 1: LAN dashboard server (R22, N2)

@@ -11,7 +11,6 @@ import type {
   ControlStatus,
   Preview,
   ReportData,
-  Role,
   Wizard,
   WizardSupport,
   AlarmDef,
@@ -110,7 +109,9 @@ const tauriApi = {
   trainingClear: (unit: number) => invoke<TrainingStatus>("training_clear", { unit }),
   // ---- control (simulated devices) and commissioning ----
   controlStatus: () => invoke<ControlStatus>("control_status"),
-  controlArm: (device_id: string, user: string, role: Role) => invoke<ControlStatus>("control_arm", { req: { device_id, user, role } }),
+  // The arm request carries no role: arming is always operator; the host refuses a forged role.
+  controlArm: (device_id: string, user: string) => invoke<ControlStatus>("control_arm", { req: { device_id, user } }),
+  commissionerUnlock: (device_id: string) => invoke<ControlStatus>("commissioner_unlock", { deviceId: device_id }),
   controlDisarm: (reason: "operator" | "app_background") => invoke<ControlStatus>("control_disarm", { reason }),
   controlPreview: (device_id: string, request: PanelRequest) => invoke<Preview>("control_preview", { req: { device_id, request } }),
   controlConfirm: (preview_id: number) => invoke<ControlStatus>("control_confirm", { previewId: preview_id }),

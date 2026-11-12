@@ -348,7 +348,7 @@
   "ctl.armed_other": "Control is armed for another device: {device}. Disarm it first.",
   "ctl.user": "Your name",
   "ctl.role": "Role",
-  "ctl.role.hint": "Local selection, recorded in the audit log. There is no login in this release.",
+  "ctl.role.hint": "Single-user local app: there is no login. The role is a safety interlock, not authentication. Commissioner is a separate unlock after arming, recorded in the audit log, and ends with the arm.",
   "ctl.role.operator": "Operator",
   "ctl.role.commissioner": "Commissioner",
   "ctl.arm": "Arm control for this device",
@@ -370,7 +370,7 @@
   "ctl.commands": "Commands",
   "ctl.bounds": "Allowed {min} to {max}, step {step}. Values outside are rejected, never clamped.",
   "ctl.sets": "Sets {reg} = {value}",
-  "ctl.err.user": "Enter your name; it goes into the audit log.",
+  "ctl.err.user": "Enter your name (1-64 characters, no control characters); it goes into the audit log.",
   "ctl.err.not_number": "Enter a number.",
   "ctl.err.range": "Outside {min} to {max}. The value is rejected, not clamped.",
   "ctl.err.step": "Not a multiple of the step {step}.",
@@ -453,7 +453,7 @@
   "wiz.new_unit": "New unit ID",
   "wiz.new_unit.hint": "1 to 247; not used by another device on this link. 0 (broadcast) is never written.",
   "wiz.new_baud": "New baud rate",
-  "wiz.user.hint": "Recorded with the role commissioner in the journal and audit log.",
+  "wiz.user.hint": "Recorded in the journal and audit log. Arming for the wizard also unlocks the commissioner role until the arm ends. No login: the role is a safety interlock.",
   "wiz.baud_note": "A baud change applies to the whole RS485 link: other devices on it stop answering until they use the same baud.",
   "wiz.err.unit": "Enter a whole number from 1 to 247.",
   "wiz.start": "Record journal and start",
@@ -662,5 +662,8 @@
   "mqtt.stat.reconnects": "Reconnects",
   "mqtt.stat.last_ack": "Last acknowledged",
   "mqtt.stat.last_error": "Last error",
-  "mqtt.none": "none"
+  "mqtt.none": "none",
+  "ctl.announce.unlocked": "Commissioner functions unlocked for {device}",
+  "ctl.monitor_only": "monitor only. Control works only on the Training simulator link, not on a manually entered TCP address (even 127.0.0.1).",
+  "audit.event.role_unlock": "Commissioner unlock"
 }

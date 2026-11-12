@@ -1,5 +1,5 @@
 {
-  "date": "2026-11-11T23:15:33.979Z",
+  "date": "2026-11-12T15:18:07.942Z",
   "platform": "Windows (WebView2 in the e2e build)",
   "journey": "PRD §5 journey 4 (simulated VFD)",
   "steps": [
@@ -41,7 +41,22 @@
     {
       "name": "countdown runs",
       "ok": true,
-      "detail": "Armed: control enabled for 60 s · trainee (Operator) → Armed: control enabled for 59 s · trainee (Operator)"
+      "detail": "Armed: control enabled for 60 s · trainee (Operator) → Armed: control enabled for 58 s · trainee (Operator)"
+    },
+    {
+      "name": "a forged role in the arm request over IPC is refused",
+      "ok": true,
+      "detail": "invalid args `req` for command `control_arm`: unknown field `role`, expected `device_id` or `user`"
+    },
+    {
+      "name": "the host holds the operator role for this arm",
+      "ok": true,
+      "detail": "operator"
+    },
+    {
+      "name": "user names over 64 characters or with control characters are refused by the host",
+      "ok": true,
+      "detail": "enter a user name (1-64 characters, no control characters) | enter a user name (1-64 characters, no control characters)"
     },
     {
       "name": "run: confirm dialog opens with the safe choice focused",
@@ -101,33 +116,43 @@
     {
       "name": "audit CSV export: ISO-8601 UTC times, set_frequency result verified",
       "ok": true,
-      "detail": "buslink-audit-s1794438934400.csv"
+      "detail": "buslink-audit-s1794496689669.csv"
     },
     {
       "name": "audit XLSX export written",
       "ok": true,
-      "detail": "buslink-audit-s1794438934400.xlsx"
+      "detail": "buslink-audit-s1794496689669.xlsx"
     },
     {
       "name": "session report: devices with profile versions, simulated note, commands with read-back and feedback",
       "ok": true,
-      "detail": "{\"devices\":3,\"sim\":\"This session includes simulated devices. Their results are simulator results, not hardware evidence.\",\"commands\":\"12/11/2026, 06:15:37 (2026-11-11T23:15:37.726Z)sim-vfd-basic-u2run0.000 → 1.000acknowledgedverified (1.000)reached (3.000)trainee (operator) | 12/11/2026, 06:15:40 (2026-11-11T23:15:40.010Z)sim-vfd-basic-u2set_frequency0.000 → 30.000acknowledgedverified (30.000)reached (30.000)trainee (operator) | 1\",\"version\":true}"
+      "detail": "{\"devices\":3,\"sim\":\"This session includes simulated devices. Their results are simulator results, not hardware evidence.\",\"commands\":\"12/11/2026, 22:18:13 (2026-11-12T15:18:13.216Z)sim-vfd-basic-u2run0.000 → 1.000acknowledgedverified (1.000)reached (3.000)trainee (operator) | 12/11/2026, 22:18:15 (2026-11-12T15:18:15.312Z)sim-vfd-basic-u2set_frequency0.000 → 30.000acknowledgedverified (30.000)reached (30.000)trainee (operator) | 1\",\"version\":true}"
     },
     {
       "name": "report saved as self-contained HTML (no script)",
       "ok": true,
-      "detail": "buslink-report-s1794438934400.html"
+      "detail": "buslink-report-s1794496689669.html"
     },
     {
       "name": "report prints to PDF (print media CSS, via CDP Page.printToPDF)",
       "ok": true,
-      "detail": "81456 bytes"
+      "detail": "81567 bytes"
+    },
+    {
+      "name": "the role selector unlocks commissioner as a separate, audited host action",
+      "ok": true,
+      "detail": "commissioner"
     },
     {
       "name": "disconnect drops the arm and says so",
       "ok": true,
       "detail": "Disarmed: the link was disconnected or stopped polling. Nothing resumes automatically."
+    },
+    {
+      "name": "disconnect also drops the commissioner unlock",
+      "ok": true,
+      "detail": "null"
     }
   ],
-  "summary": "25/25 passed"
+  "summary": "30/30 passed"
 }

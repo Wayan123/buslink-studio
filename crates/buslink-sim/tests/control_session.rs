@@ -124,7 +124,7 @@ fn journey4_vfd_through_control() {
         r.control.preview(&r.vfd, named("run", None)),
         Err(ControlError::Command(CommandError::NotArmed))
     ));
-    let st = r.control.arm(&r.vfd, "trainee", Role::Operator).unwrap();
+    let st = r.control.arm(&r.vfd, "trainee").unwrap();
     assert_eq!(st.armed_device.as_deref(), Some(r.vfd.as_str()));
     assert!(st.armed_remaining_ms.unwrap() > 55_000 && st.arm_timeout_ms == 60_000);
 
@@ -197,7 +197,7 @@ fn journey4_vfd_through_control() {
 fn disarm_on_disconnect_and_reconnect() {
     let r = rig(42);
     wait_for("temp polled", 10, || good(&r.session, &r.temp, "pv"));
-    r.control.arm(&r.temp, "trainee", Role::Operator).unwrap();
+    r.control.arm(&r.temp, "trainee").unwrap();
     let p = r.control.preview(&r.temp, named("heater_on", None)).unwrap();
     r.control.confirm(p.id).unwrap();
     r.session.disconnect(TRAINING_LINK_ID).unwrap();
@@ -212,7 +212,7 @@ fn disarm_on_disconnect_and_reconnect() {
     assert!(r.control.status().armed_device.is_none(), "reconnect never re-arms");
     assert!(r.control.preview(&r.temp, named("heater_on", None)).is_err());
     // Arm again, then a reconnect in between drops it with reason "reconnect".
-    r.control.arm(&r.temp, "trainee", Role::Operator).unwrap();
+    r.control.arm(&r.temp, "trainee").unwrap();
     r.session.disconnect(TRAINING_LINK_ID).unwrap();
     r.session.reconnect(TRAINING_LINK_ID).unwrap();
     r.session.start_polling(TRAINING_LINK_ID).unwrap();
@@ -264,7 +264,8 @@ fn wizard_unit_id_and_baud_pass() {
         .unwrap();
     assert_eq!((w.step, w.old.unit_id, w.new.unit_id), (WizardStep::Journaled, 2, 5));
     assert!(r.control.wizard_preview().is_err(), "arm first");
-    r.control.arm(&r.vfd, "tech", Role::Commissioner).unwrap();
+    r.control.arm(&r.vfd, "tech").unwrap();
+    r.control.commissioner_unlock(&r.vfd).unwrap();
     let p = r.control.wizard_preview().unwrap();
     assert_eq!((p.address, p.raw_registers.clone()), (7, vec![5]));
     r.control.confirm(p.id).unwrap();
@@ -299,7 +300,8 @@ fn wizard_unit_id_and_baud_pass() {
         .wizard_start(&r.temp, CommSettingKind::Baud, 19_200, "tech")
         .unwrap();
     assert_eq!(w.other_devices.len(), 2);
-    r.control.arm(&r.temp, "tech", Role::Commissioner).unwrap();
+    r.control.arm(&r.temp, "tech").unwrap();
+    r.control.commissioner_unlock(&r.temp).unwrap();
     let p = r.control.wizard_preview().unwrap();
     assert_eq!(p.raw_registers, vec![2]);
     r.control.confirm(p.id).unwrap();
@@ -338,7 +340,8 @@ fn wizard_failure_and_revert() {
     r.control
         .wizard_start(&r.temp, CommSettingKind::UnitId, 7, "tech")
         .unwrap();
-    r.control.arm(&r.temp, "tech", Role::Commissioner).unwrap();
+    r.control.arm(&r.temp, "tech").unwrap();
+    r.control.commissioner_unlock(&r.temp).unwrap();
     let p = r.control.wizard_preview().unwrap();
     r.control.confirm(p.id).unwrap();
     r.control.execute().unwrap();
@@ -374,5 +377,81 @@ fn wizard_failure_and_revert() {
         "one write only"
     );
     r.control.wizard_close().unwrap();
+    r.session.shutdown();
+}
+
+/// Security review 07, M1: the role is host state. Arming is always operator,
+/// comm-config fails without the unlock, and the unlock ends with the arm.
+#[test]
+fn commissioner_unlock_is_host_state_and_ends_with_the_arm() {
+    let r = rig(45);
+    wait_for("VFD polled", 10, || good(&r.session, &r.vfd, "output_freq"));
+    assert!(r.control.arm(&r.vfd, "  ").is_err(), "empty user");
+    assert!(r.control.arm(&r.vfd, &"x".repeat(65)).is_err(), "over 64 characters");
+    assert!(r.control.arm(&r.vfd, "a\nb").is_err(), "control character");
+    assert!(r.control.commissioner_unlock(&r.vfd).is_err(), "unlock needs an arm");
+
+    let st = r.control.arm(&r.vfd, "  tech  ").unwrap();
+    assert_eq!(
+        (st.armed_role, st.armed_user.as_deref()),
+        (Some(Role::Operator), Some("tech"))
+    );
+    r.control
+        .wizard_start(&r.vfd, CommSettingKind::UnitId, 5, "tech")
+        .unwrap();
+    assert!(
+        matches!(
+            r.control.wizard_preview(),
+            Err(ControlError::Command(CommandError::Role { .. }))
+        ),
+        "comm-config write is refused without the unlock"
+    );
+    assert!(
+        r.control.commissioner_unlock(&r.temp).is_err(),
+        "other device is not armed"
+    );
+    let st = r.control.commissioner_unlock(&r.vfd).unwrap();
+    assert_eq!(st.armed_role, Some(Role::Commissioner));
+    r.control.wizard_preview().unwrap();
+    r.control.cancel().unwrap();
+
+    // Disconnect drops arm and unlock; a new arm is operator again.
+    r.session.stop_polling(TRAINING_LINK_ID).unwrap();
+    assert!(r.control.status().armed_role.is_none());
+    r.session.start_polling(TRAINING_LINK_ID).unwrap();
+    let st = r.control.arm(&r.vfd, "tech").unwrap();
+    assert_eq!(st.armed_role, Some(Role::Operator), "unlock did not survive");
+    assert!(r.control.wizard_preview().is_err());
+
+    // Disarm (also app background) and re-arm: operator again.
+    r.control.commissioner_unlock(&r.vfd).unwrap();
+    r.control.disarm(DisarmReason::AppBackground);
+    assert_eq!(r.control.arm(&r.vfd, "tech").unwrap().armed_role, Some(Role::Operator));
+    let rows = r.session.audit_rows().unwrap();
+    assert_eq!(
+        rows.iter()
+            .filter(|a| a.event.as_deref() == Some("role_unlock"))
+            .count(),
+        2,
+        "each unlock is audited"
+    );
+    r.session.shutdown();
+}
+
+/// The unlock expires with the idle arm timeout.
+#[test]
+fn commissioner_unlock_expires_with_the_arm() {
+    let mut r = rig(46);
+    r.control = Control::new(Arc::clone(&r.session), CommandConfig { arm_timeout_ms: 400 });
+    wait_for("VFD polled", 10, || good(&r.session, &r.vfd, "output_freq"));
+    r.control.arm(&r.vfd, "tech").unwrap();
+    assert_eq!(
+        r.control.commissioner_unlock(&r.vfd).unwrap().armed_role,
+        Some(Role::Commissioner)
+    );
+    std::thread::sleep(Duration::from_millis(600));
+    let st = r.control.status();
+    assert_eq!((st.armed_role, st.disarm_reason), (None, Some(DisarmReason::Expired)));
+    assert_eq!(r.control.arm(&r.vfd, "tech").unwrap().armed_role, Some(Role::Operator));
     r.session.shutdown();
 }

@@ -64,7 +64,7 @@ impl LanSource for TestSource {
     }
 
     fn profiles(&self) -> Vec<Arc<Profile>> {
-        vec![]
+        vec![Arc::new(sensitive_profile())]
     }
 
     fn trend(
@@ -85,6 +85,52 @@ impl LanSource for TestSource {
             Err(TrendFail::NotFound)
         }
     }
+}
+
+/// The session cookie a browser holds after the entry redirect.
+fn cookie(t: &str) -> [(&'static str, String); 1] {
+    [("Cookie", format!("bl_t={t}"))]
+}
+
+async fn get_with_cookie(srv: &LanServer, target: &str) -> lan_client::Resp {
+    let ck = cookie(srv.token());
+    request(
+        srv.addr(),
+        srv.fingerprint(),
+        "GET",
+        target,
+        &[(ck[0].0, ck[0].1.as_str())],
+        None,
+    )
+    .await
+}
+
+const SECRET_URL: &str = "https://intranet.example/manuals/secret-manual.pdf";
+const SECRET_RECORD: &str = "D:\\records\\secret-test-log.txt";
+
+/// A real profile with the fields that must not reach a browser filled in.
+fn sensitive_profile() -> Profile {
+    use buslink_core::profile::{Evidence, HardwareRecord, TestResult, Text};
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../profiles/bgt-smps-8in1.json");
+    let mut p = buslink_core::profile::load(&std::fs::read(path).unwrap())
+        .unwrap()
+        .profile;
+    if let Some(s) = p.source.as_mut() {
+        s.url = Some(SECRET_URL.into());
+    }
+    p.evidence = Some(Evidence {
+        hardware: vec![HardwareRecord {
+            date: "2026-11-01".into(),
+            adapter: Text::Plain("adapter".into()),
+            platform: Text::Plain("platform".into()),
+            record: Text::Plain(SECRET_RECORD.into()),
+            result: TestResult::Pass,
+            firmware: None,
+            unit_id: None,
+            notes: None,
+        }],
+    });
+    p
 }
 
 fn assets() -> MapAssets {
@@ -165,7 +211,7 @@ async fn unknown_api_paths_stay_404_when_assets_fall_back_to_index() {
         .unwrap();
     let (addr, fp, t) = (srv.addr(), srv.fingerprint().to_string(), srv.token().to_string());
     for p in ["/api/command", "/api/write", "/api/arm", "/api/"] {
-        let r = request(addr, &fp, "GET", &format!("{p}?t={t}"), &[], None).await;
+        let r = request(addr, &fp, "GET", p, &[("Cookie", &format!("bl_t={t}"))], None).await;
         assert_eq!(r.status, 404, "{p}");
     }
     srv.stop().await;
@@ -223,18 +269,19 @@ async fn l3_no_write_routes_and_no_bodies() {
     let (srv, _bus) = start(cfg()).await;
     let (addr, fp, t) = (srv.addr(), srv.fingerprint().to_string(), srv.token().to_string());
     for target in targets() {
-        let sep = if target.contains('?') { '&' } else { '?' };
-        let url = format!("{target}{sep}t={t}");
+        let url = target.clone();
+        let ck = format!("bl_t={t}");
+        let ck = [("Cookie", ck.as_str())];
         for m in METHODS.iter().filter(|m| **m != "GET") {
-            let r = request(addr, &fp, m, &url, &[], None).await;
+            let r = request(addr, &fp, m, &url, &ck, None).await;
             assert!(!(200..300).contains(&r.status), "{m} {target} returned {}", r.status);
             assert_eq!(r.status, 405, "{m} {target}");
             assert_eq!(r.header("allow"), Some("GET"));
             // A body does not help either.
-            let r = request(addr, &fp, m, &url, &[], Some(b"{\"write\":1}")).await;
+            let r = request(addr, &fp, m, &url, &ck, Some(b"{\"write\":1}")).await;
             assert!(!(200..300).contains(&r.status), "{m} {target} with body");
         }
-        let r = request(addr, &fp, "GET", &url, &[], Some(b"x")).await;
+        let r = request(addr, &fp, "GET", &url, &ck, Some(b"x")).await;
         assert_eq!(r.status, 400, "GET {target} with a body");
     }
     srv.stop().await;
@@ -245,13 +292,11 @@ async fn get_routes_serve_data_with_security_headers_and_cookie() {
     let (srv, _bus) = start(cfg()).await;
     let (addr, fp, t) = (srv.addr(), srv.fingerprint().to_string(), srv.token().to_string());
 
+    // The entry link sets the cookie and redirects to `/` without the token (L1).
     let r = request(addr, &fp, "GET", &format!("/?t={t}"), &[], None).await;
-    assert_eq!(r.status, 200);
-    assert!(
-        r.text().contains("<head><meta name=\"buslink-mode\" content=\"lan\">"),
-        "{}",
-        r.text()
-    );
+    assert_eq!(r.status, 303);
+    assert_eq!(r.header("location"), Some("/"));
+    assert!(r.body.is_empty() && !r.text().contains(&t));
     let cookie = r.header("set-cookie").unwrap().to_string();
     assert!(
         cookie.contains(&format!("bl_t={t}"))
@@ -259,6 +304,16 @@ async fn get_routes_serve_data_with_security_headers_and_cookie() {
             && cookie.contains("HttpOnly")
             && cookie.contains("SameSite=Strict")
     );
+    assert_eq!(r.header("referrer-policy"), Some("no-referrer"));
+    assert_eq!(r.header("cache-control"), Some("no-store"));
+    let r = get_with_cookie(&srv, "/").await;
+    assert_eq!(r.status, 200);
+    assert!(
+        r.text().contains("<head><meta name=\"buslink-mode\" content=\"lan\">"),
+        "{}",
+        r.text()
+    );
+    assert!(r.header("set-cookie").is_none());
     assert_eq!(r.header("cache-control"), Some("no-store"));
     assert_eq!(r.header("referrer-policy"), Some("no-referrer"));
     assert_eq!(r.header("x-content-type-options"), Some("nosniff"));
@@ -281,18 +336,17 @@ async fn get_routes_serve_data_with_security_headers_and_cookie() {
     assert_eq!(r.header("content-type"), Some("text/javascript"));
     // No directory traversal and no unknown files.
     for p in ["/../Cargo.toml", "/assets/../index.html", "/missing.js", "/assets"] {
-        let r = request(addr, &fp, "GET", &format!("{p}?t={t}"), &[], None).await;
+        let r = get_with_cookie(&srv, p).await;
         assert_eq!(r.status, 404, "{p}");
     }
 
-    let r = request(addr, &fp, "GET", &format!("/api/snapshot?t={t}"), &[], None).await;
+    let r = get_with_cookie(&srv, "/api/snapshot").await;
     assert_eq!(r.status, 200);
     let v: serde_json::Value = serde_json::from_slice(&r.body).unwrap();
     assert_eq!(v["session_id"], "s-test");
     assert!(v["profiles"].is_array() && v["links"][0]["devices"][0]["id"] == "dev1");
 
-    let q = format!("/api/trend?tag=dev1/t1&from=1000&to=5000&buckets=50&t={t}");
-    let r = request(addr, &fp, "GET", &q, &[], None).await;
+    let r = get_with_cookie(&srv, "/api/trend?tag=dev1/t1&from=1000&to=5000&buckets=50").await;
     assert_eq!(r.status, 200);
     let v: serde_json::Value = serde_json::from_slice(&r.body).unwrap();
     assert_eq!(v["t"], serde_json::json!([1000, 5000]));
@@ -305,11 +359,11 @@ async fn get_routes_serve_data_with_security_headers_and_cookie() {
         ("tag=dev1/t1&from=x&to=2", 400),
         ("from=1&to=2", 400),
     ] {
-        let r = request(addr, &fp, "GET", &format!("/api/trend?{q}&t={t}"), &[], None).await;
+        let r = get_with_cookie(&srv, &format!("/api/trend?{q}")).await;
         assert_eq!(r.status, want, "{q}");
     }
     // A plain GET of the stream route is not a WebSocket upgrade.
-    let r = request(addr, &fp, "GET", &format!("/api/stream?t={t}"), &[], None).await;
+    let r = get_with_cookie(&srv, "/api/stream").await;
     assert!(!(200..300).contains(&r.status));
     srv.stop().await;
 }
@@ -326,7 +380,7 @@ fn frame_tags(v: &serde_json::Value) -> Vec<&serde_json::Value> {
 async fn l5_stream_carries_the_same_samples_as_the_bus() {
     let (srv, bus) = start(cfg()).await;
     let (addr, fp, t) = (srv.addr(), srv.fingerprint().to_string(), srv.token().to_string());
-    let mut ws = ws_connect(addr, &fp, &format!("?t={t}"), None).await.unwrap();
+    let mut ws = ws_connect(addr, &fp, "", Some(&t), None).await.unwrap();
     let first = tokio::time::timeout(Duration::from_secs(3), ws.next())
         .await
         .unwrap()
@@ -411,7 +465,7 @@ async fn l5_stream_carries_the_same_samples_as_the_bus() {
         );
     }
     // A late client sees the same state in its snapshot.
-    let r = request(addr, &fp, "GET", &format!("/api/snapshot?t={t}"), &[], None).await;
+    let r = get_with_cookie(&srv, "/api/snapshot").await;
     let snap: serde_json::Value = serde_json::from_slice(&r.body).unwrap();
     let tags = snap["tags"].as_array().unwrap();
     assert_eq!(tags.len(), 2);
@@ -427,7 +481,7 @@ async fn l5_stream_carries_the_same_samples_as_the_bus() {
 async fn l6_stop_closes_everything_and_restart_issues_new_credentials() {
     let (srv, _bus) = start(cfg()).await;
     let (addr, fp, t) = (srv.addr(), srv.fingerprint().to_string(), srv.token().to_string());
-    let mut ws = ws_connect(addr, &fp, &format!("?t={t}"), None).await.unwrap();
+    let mut ws = ws_connect(addr, &fp, "", Some(&t), None).await.unwrap();
     let _ = ws.next().await; // snapshot
     assert_eq!(srv.status().details.unwrap().clients.len(), 1);
     srv.stop().await;
@@ -453,18 +507,19 @@ async fn l6_stop_closes_everything_and_restart_issues_new_credentials() {
     assert_ne!(srv2.token(), t);
     assert_ne!(srv2.fingerprint(), fp);
     let fp2 = srv2.fingerprint().to_string();
-    let old = request(addr, &fp2, "GET", &format!("/api/snapshot?t={t}"), &[], None).await;
-    assert_eq!(old.status, 401);
-    let new = request(
+    let old = request(
         addr,
         &fp2,
         "GET",
-        &format!("/api/snapshot?t={}", srv2.token()),
-        &[],
+        "/api/snapshot",
+        &[("Cookie", &format!("bl_t={t}"))],
         None,
     )
     .await;
-    assert_eq!(new.status, 200);
+    assert_eq!(old.status, 401);
+    let old_entry = request(addr, &fp2, "GET", &format!("/?t={t}"), &[], None).await;
+    assert_eq!(old_entry.status, 401);
+    assert_eq!(get_with_cookie(&srv2, "/api/snapshot").await.status, 200);
     // The old certificate is not accepted either (the client pins the fingerprint).
     assert!(tls_connect(addr, &fp).await.is_err());
     srv2.stop().await;
@@ -476,19 +531,19 @@ async fn client_limit_origin_and_lockout() {
     c.max_clients = 2;
     let (srv, _bus) = start(c).await;
     let (addr, fp, t) = (srv.addr(), srv.fingerprint().to_string(), srv.token().to_string());
-    let q = format!("?t={t}");
+    let tk = Some(t.as_str());
 
     // Cross-origin upgrade is refused.
     assert_eq!(
-        ws_connect(addr, &fp, &q, Some("https://evil.example")).await.err(),
+        ws_connect(addr, &fp, "", tk, Some("https://evil.example")).await.err(),
         Some(403)
     );
     let host = addr.to_string();
     let same = format!("https://{host}");
-    let a = ws_connect(addr, &fp, &q, Some(&same)).await.unwrap();
-    let _b = ws_connect(addr, &fp, &q, None).await.unwrap();
+    let a = ws_connect(addr, &fp, "", tk, Some(&same)).await.unwrap();
+    let _b = ws_connect(addr, &fp, "", tk, None).await.unwrap();
     assert_eq!(
-        ws_connect(addr, &fp, &q, None).await.err(),
+        ws_connect(addr, &fp, "", tk, None).await.err(),
         Some(503),
         "third viewer is refused"
     );
@@ -496,7 +551,7 @@ async fn client_limit_origin_and_lockout() {
     drop(a);
     let mut ok = false;
     for _ in 0..40 {
-        if ws_connect(addr, &fp, &q, None).await.is_ok() {
+        if ws_connect(addr, &fp, "", tk, None).await.is_ok() {
             ok = true;
             break;
         }
@@ -518,7 +573,15 @@ async fn five_bad_tokens_lock_the_address_out_even_for_the_right_token() {
             401
         );
     }
-    let r = request(addr, &fp, "GET", &format!("/api/snapshot?t={t}"), &[], None).await;
+    let r = request(
+        addr,
+        &fp,
+        "GET",
+        "/api/snapshot",
+        &[("Cookie", &format!("bl_t={t}"))],
+        None,
+    )
+    .await;
     assert_eq!(r.status, 429);
     assert!(r.header("retry-after").is_some());
     let d = srv.status().details.unwrap();
@@ -536,9 +599,16 @@ async fn request_rate_is_limited() {
     let mut codes = Vec::new();
     for _ in 0..8 {
         codes.push(
-            request(addr, &fp, "GET", &format!("/api/snapshot?t={t}"), &[], None)
-                .await
-                .status,
+            request(
+                addr,
+                &fp,
+                "GET",
+                "/api/snapshot",
+                &[("Cookie", &format!("bl_t={t}"))],
+                None,
+            )
+            .await
+            .status,
         );
     }
     assert_eq!(&codes[..5], &[200; 5]);
@@ -556,4 +626,218 @@ async fn refuses_to_bind_outside_private_ranges() {
         assert!(r.is_err(), "{ip:?}");
     }
     let _ = SocketAddr::from(([127, 0, 0, 1], 1));
+}
+
+/// L2 (security review 07): viewers get a display subset of each profile, not the profile.
+#[tokio::test]
+async fn l2_snapshot_profiles_are_a_display_subset() {
+    let (srv, _bus) = start(cfg()).await;
+    let (addr, fp, t) = (srv.addr(), srv.fingerprint().to_string(), srv.token().to_string());
+    let full = serde_json::to_string(&sensitive_profile()).unwrap();
+    assert!(
+        full.contains(SECRET_URL) && full.contains("secret-test-log"),
+        "fixture sanity"
+    );
+
+    let r = get_with_cookie(&srv, "/api/snapshot").await;
+    assert_eq!(r.status, 200);
+    let mut bodies = vec![r.text()];
+    let mut ws = ws_connect(addr, &fp, "", Some(&t), None).await.unwrap();
+    let Message::Text(first) = tokio::time::timeout(Duration::from_secs(3), ws.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap()
+    else {
+        panic!("first message must be text")
+    };
+    bodies.push(first.as_str().to_string());
+    let allowed_profile = [
+        "profile_id",
+        "profile_version",
+        "vendor",
+        "model",
+        "support_level",
+        "simulated_only",
+        "registers",
+    ];
+    let allowed_register = [
+        "id",
+        "name",
+        "type",
+        "unit",
+        "scale",
+        "decimals",
+        "valid_range",
+        "display_range",
+    ];
+    for body in &bodies {
+        for banned in [
+            SECRET_URL,
+            "secret-test-log",
+            "secret-manual",
+            "\"evidence\"",
+            "\"source\"",
+            "\"url\"",
+            "\"record\"",
+            "\"write\"",
+            "\"commands\"",
+            "\"comm_config\"",
+            "\"word_order\"",
+            "\"address\"",
+            "\"doc_address\"",
+        ] {
+            assert!(!body.contains(banned), "{banned} reached the browser");
+        }
+        let v: serde_json::Value = serde_json::from_str(body).unwrap();
+        let v = if v["type"] == "snapshot" { v["data"].clone() } else { v };
+        let entry = &v["profiles"][0];
+        let want_key = format!(
+            "{}@{}",
+            entry["profile"]["profile_id"].as_str().unwrap(),
+            entry["profile"]["profile_version"].as_str().unwrap()
+        );
+        assert_eq!(entry["key"], want_key.as_str());
+        let prof = entry["profile"].as_object().unwrap();
+        assert!(
+            prof.keys().all(|k| allowed_profile.contains(&k.as_str())),
+            "{:?}",
+            prof.keys()
+        );
+        let regs = prof["registers"].as_array().unwrap();
+        assert!(!regs.is_empty());
+        for r in regs {
+            let keys: Vec<_> = r.as_object().unwrap().keys().collect();
+            assert!(keys.iter().all(|k| allowed_register.contains(&k.as_str())), "{keys:?}");
+            assert!(r["id"].is_string() && (r["name"].is_object() || r["name"].is_string()));
+        }
+        // What the tiles and bars need is still there.
+        assert!(regs.iter().any(|r| r["unit"].is_string()));
+        assert!(
+            regs.iter()
+                .any(|r| r.get("display_range").is_some() || r.get("valid_range").is_some())
+        );
+    }
+    srv.stop().await;
+}
+
+/// L1 (security review 07): the token in a URL works only on `GET /`, which hands it to a cookie.
+#[tokio::test]
+async fn l1_query_token_is_accepted_only_on_the_entry_page() {
+    let (srv, _bus) = start(cfg()).await;
+    let (addr, fp, t) = (srv.addr(), srv.fingerprint().to_string(), srv.token().to_string());
+    for target in [
+        "/api/snapshot",
+        "/api/trend?tag=dev1/t1&from=1&to=2",
+        "/api/stream",
+        "/assets/app.js",
+        "/index.html",
+        "/nope",
+    ] {
+        let sep = if target.contains('?') { '&' } else { '?' };
+        let r = request(addr, &fp, "GET", &format!("{target}{sep}t={t}"), &[], None).await;
+        assert_eq!(r.status, 401, "{target} must not accept ?t=");
+        assert!(r.header("set-cookie").is_none());
+    }
+    // The WebSocket upgrade does not take it either.
+    assert_eq!(
+        ws_connect(addr, &fp, &format!("?t={t}"), None, None).await.err(),
+        Some(401)
+    );
+    // Entry page: redirect to `/` with no token or other query in the Location.
+    for target in [format!("/?t={t}"), format!("/?x=1&t={t}&y=2")] {
+        let r = request(addr, &fp, "GET", &target, &[], None).await;
+        assert_eq!(r.status, 303, "{target}");
+        assert_eq!(r.header("location"), Some("/"));
+        assert!(r.header("set-cookie").unwrap().starts_with(&format!("bl_t={t};")));
+        assert!(
+            r.headers
+                .iter()
+                .all(|(_, v)| !v.contains("t=") || v.starts_with("bl_t="))
+        );
+    }
+    // A wrong token on the entry page is a failure like any other.
+    assert_eq!(request(addr, &fp, "GET", "/?t=nope", &[], None).await.status, 401);
+    // With the cookie the page and the API work, and a stray ?t= is ignored there.
+    assert_eq!(get_with_cookie(&srv, "/").await.status, 200);
+    assert_eq!(get_with_cookie(&srv, "/api/snapshot?t=whatever").await.status, 200);
+    assert!(ws_connect(addr, &fp, "", Some(&t), None).await.is_ok());
+    srv.stop().await;
+}
+
+/// L3 (security review 07): one address cannot hold more than its share of connections.
+#[tokio::test]
+async fn l3_per_address_connection_cap() {
+    let mut c = cfg();
+    c.max_connections_per_ip = 3;
+    c.max_unauthenticated = 16;
+    let (srv, _bus) = start(c).await;
+    let (addr, fp) = (srv.addr(), srv.fingerprint().to_string());
+    let mut idle = Vec::new();
+    for _ in 0..3 {
+        idle.push(tls_connect(addr, &fp).await.expect("within the cap"));
+    }
+    assert!(
+        tls_connect(addr, &fp).await.is_err(),
+        "a fourth connection from this address is refused"
+    );
+    assert!(srv.status().details.unwrap().refused_connections >= 1);
+    drop(idle.pop());
+    let mut again = None;
+    for _ in 0..80 {
+        if let Ok(s) = tls_connect(addr, &fp).await {
+            again = Some(s);
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(again.is_some(), "a slot frees when a connection closes");
+    srv.stop().await;
+}
+
+/// L3: idle connections without a token cannot fill the server; a viewer already connected is unaffected.
+#[tokio::test]
+async fn l3_unauthenticated_connections_have_their_own_cap() {
+    let mut c = cfg();
+    c.max_connections = 32;
+    c.max_connections_per_ip = 8;
+    c.max_unauthenticated = 2;
+    let (srv, _bus) = start(c).await;
+    let (addr, fp, t) = (srv.addr(), srv.fingerprint().to_string(), srv.token().to_string());
+    let mut ws = ws_connect(addr, &fp, "", Some(&t), None).await.unwrap();
+    let _ = ws.next().await; // snapshot
+    let mut idle = vec![
+        tls_connect(addr, &fp).await.unwrap(),
+        tls_connect(addr, &fp).await.unwrap(),
+    ];
+    assert!(
+        tls_connect(addr, &fp).await.is_err(),
+        "a third connection without a token is refused although only a few of the 32 slots are used"
+    );
+    // The connected viewer keeps its stream.
+    let msg = tokio::time::timeout(Duration::from_secs(3), ws.next()).await;
+    assert!(matches!(msg, Ok(Some(Ok(_)))), "the viewer still receives data");
+    assert_eq!(srv.status().details.unwrap().clients.len(), 1);
+    idle.clear();
+    let mut ok = false;
+    for _ in 0..80 {
+        if request(
+            addr,
+            &fp,
+            "GET",
+            "/api/snapshot",
+            &[("Cookie", &format!("bl_t={t}"))],
+            None,
+        )
+        .await
+        .status
+            == 200
+        {
+            ok = true;
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(ok, "new viewers can connect again once the idle connections are gone");
+    srv.stop().await;
 }

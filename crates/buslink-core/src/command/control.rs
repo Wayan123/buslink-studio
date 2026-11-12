@@ -17,7 +17,7 @@ use super::{
 use crate::profile::CapabilityLevel;
 use crate::protocol::pdu::ReadRequest;
 use crate::session::{LinkState, Session, SessionError};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex, MutexGuard};
 use thiserror::Error;
 
@@ -31,6 +31,32 @@ pub enum ControlError {
     Step(#[from] StepError),
     #[error("{0}")]
     Rejected(String),
+}
+
+/// Longest user name accepted for arming and the audit log.
+pub const MAX_USER_CHARS: usize = 64;
+
+/// Trim a user name and reject empty, over-long or control-character names.
+/// Applied by the host; the UI checks the same rule for early feedback.
+pub fn validate_user(user: &str) -> Result<String, ControlError> {
+    let user = user.trim();
+    if user.is_empty() || user.chars().count() > MAX_USER_CHARS || user.chars().any(char::is_control) {
+        return Err(ControlError::Rejected(format!(
+            "enter a user name (1-{MAX_USER_CHARS} characters, no control characters)"
+        )));
+    }
+    Ok(user.to_owned())
+}
+
+/// The arm request as it arrives over IPC. It carries no role: arming always
+/// starts as `Operator`, and unknown fields (a forged `role`) are refused.
+/// This app is single-user and local with no login, so the role is a safety
+/// interlock, not authentication (docs/security/roles.md).
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ArmRequest {
+    pub device_id: String,
+    pub user: String,
 }
 
 /// The last command: its preview, outcome and process feedback, kept for the panel.
@@ -201,11 +227,10 @@ impl Control {
         }
     }
 
-    pub fn arm(&self, device_id: &str, user: &str, role: Role) -> Result<ControlStatus, ControlError> {
-        let user = user.trim();
-        if user.is_empty() || user.chars().count() > 64 || user.chars().any(char::is_control) {
-            return Err(ControlError::Rejected("enter a user name (1-64 characters)".into()));
-        }
+    /// Arm control for one device. The role is always `Operator`; raising it is
+    /// a separate host action (`commissioner_unlock`).
+    pub fn arm(&self, device_id: &str, user: &str) -> Result<ControlStatus, ControlError> {
+        let user = validate_user(user)?;
         {
             let mut g = self.lock();
             self.check(&mut g);
@@ -214,12 +239,30 @@ impl Control {
             g.svc.arm(
                 access.target,
                 Operator {
-                    user: user.to_owned(),
-                    role,
+                    user,
+                    role: Role::Operator,
                 },
             )?;
             g.armed_link = Some((link, access.generation));
             g.disarm_reason = None;
+        }
+        Ok(self.status())
+    }
+
+    /// Raise the armed operator to `Commissioner` (unit ID and baud changes).
+    /// Audited. It ends with the arm: expiry, disarm, disconnect, reconnect,
+    /// profile change and app background all return to `Operator`.
+    pub fn commissioner_unlock(&self, device_id: &str) -> Result<ControlStatus, ControlError> {
+        {
+            let mut g = self.lock();
+            let _ = self.armed_access(&mut g, device_id)?;
+            g.svc.raise_role(Role::Commissioner)?;
+            if let Some(op) = g.svc.armed_operator().cloned()
+                && let Some((_, wop)) = g.wizard_target.as_mut()
+                && wop.user == op.user
+            {
+                wop.role = op.role;
+            }
         }
         Ok(self.status())
     }
@@ -372,10 +415,8 @@ impl Control {
         value: u32,
         user: &str,
     ) -> Result<Wizard, ControlError> {
-        let user = user.trim();
-        if user.is_empty() || user.chars().count() > 64 || user.chars().any(char::is_control) {
-            return Err(ControlError::Rejected("enter a user name (1-64 characters)".into()));
-        }
+        let user = validate_user(user)?;
+        let user = user.as_str();
         let mut g = self.lock();
         self.check(&mut g);
         if g.wizard.as_ref().is_some_and(|w| !w.is_finished() && !w.can_send()) {
@@ -442,9 +483,14 @@ impl Control {
                 }
             }
         }
+        // The journal records the role the host really holds, never a claimed one.
+        let role = match g.svc.armed_operator() {
+            Some(o) if g.svc.armed_device() == Some(device_id) => o.role,
+            _ => Role::Operator,
+        };
         let operator = Operator {
             user: user.to_owned(),
-            role: Role::Commissioner,
+            role,
         };
         let wizard = Wizard::new(
             device_id,

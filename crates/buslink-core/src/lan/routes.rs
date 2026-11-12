@@ -3,7 +3,7 @@
 //! can reach the command service, the poll workers or a transport.
 
 use super::hub::Hub;
-use super::limits::{Limiter, Verdict};
+use super::limits::{ConnGuard, Limiter, Verdict};
 use super::token::ct_eq;
 use super::{AssetSource, LanSource, TrendFail};
 use axum::Router;
@@ -46,6 +46,11 @@ pub const MAX_TREND_SPAN_MS: i64 = 366 * 86_400_000;
 
 #[derive(Clone, Copy)]
 pub(crate) struct ClientAddr(pub SocketAddr);
+
+/// The connection a request arrived on, so the guard can move it out of the
+/// unauthenticated pool once a request carries a valid token.
+#[derive(Clone)]
+pub(crate) struct ConnHandle(pub Arc<ConnGuard>);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct ClientInfo {
@@ -148,22 +153,31 @@ pub(crate) fn csp(host_port: &str) -> String {
     )
 }
 
-/// `(token valid, it came from the query string)`
-fn authenticate(req: &Request, token: &str) -> (bool, bool) {
-    let mut via_query = false;
-    if let Some(q) = req.uri().query() {
-        for pair in q.split('&') {
-            if let Some(("t", v)) = pair.split_once('=')
-                && ct_eq(v.as_bytes(), token.as_bytes())
-            {
-                via_query = true;
-            }
+/// Where a valid token came from.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Auth {
+    /// The session cookie (every route).
+    Cookie,
+    /// `?t=` on `GET /` only: the entry from the URL or QR code. Answered with a redirect.
+    EntryLink,
+    None,
+}
+
+fn query_token_ok(req: &Request, token: &str) -> bool {
+    let Some(q) = req.uri().query() else { return false };
+    let mut ok = false;
+    for pair in q.split('&') {
+        if let Some(("t", v)) = pair.split_once('=')
+            && ct_eq(v.as_bytes(), token.as_bytes())
+        {
+            ok = true;
         }
     }
-    if via_query {
-        return (true, true);
-    }
-    let mut cookie_ok = false;
+    ok
+}
+
+fn cookie_ok(req: &Request, token: &str) -> bool {
+    let mut ok = false;
     for v in req.headers().get_all(header::COOKIE) {
         let Ok(s) = v.to_str() else { continue };
         for part in s.split(';') {
@@ -171,11 +185,24 @@ fn authenticate(req: &Request, token: &str) -> (bool, bool) {
                 && k == COOKIE
                 && ct_eq(v.as_bytes(), token.as_bytes())
             {
-                cookie_ok = true;
+                ok = true;
             }
         }
     }
-    (cookie_ok, false)
+    ok
+}
+
+/// The token in the query string counts only on `GET /` (security review 07, L1). API and
+/// WebSocket routes accept the cookie only, so the token never travels in their URLs.
+fn authenticate(req: &Request, token: &str) -> Auth {
+    if req.uri().path() == "/" && query_token_ok(req, token) {
+        return Auth::EntryLink;
+    }
+    if cookie_ok(req, token) {
+        Auth::Cookie
+    } else {
+        Auth::None
+    }
 }
 
 fn has_body(h: &HeaderMap) -> bool {
@@ -205,11 +232,14 @@ async fn guard(
         }
         return harden(r, &csp);
     }
-    let (ok, via_query) = authenticate(&req, &ctx.token);
-    if !ok {
+    let auth = authenticate(&req, &ctx.token);
+    if auth == Auth::None {
         lock(&ctx.limiter).record_failure(peer.ip(), now);
         ctx.stats.rejected.fetch_add(1, Ordering::Relaxed);
         return harden(plain(StatusCode::UNAUTHORIZED, "unauthorized"), &csp);
+    }
+    if let Some(conn) = req.extensions().get::<ConnHandle>() {
+        conn.0.mark_authenticated();
     }
     if has_body(req.headers()) {
         return harden(plain(StatusCode::BAD_REQUEST, "request bodies are not accepted"), &csp);
@@ -219,17 +249,20 @@ async fn guard(
         r.headers_mut().insert(header::ALLOW, HeaderValue::from_static("GET"));
         return harden(r, &csp);
     }
-    let set_cookie = via_query && req.uri().path() == "/";
-    let mut resp = next.run(req).await;
-    if set_cookie
-        && let Ok(v) = HeaderValue::from_str(&format!(
+    if auth == Auth::EntryLink {
+        // Set the cookie and send the browser to `/` without the token in the URL.
+        let mut r = Response::new(Body::empty());
+        *r.status_mut() = StatusCode::SEE_OTHER;
+        r.headers_mut().insert(header::LOCATION, HeaderValue::from_static("/"));
+        if let Ok(v) = HeaderValue::from_str(&format!(
             "{COOKIE}={}; Path=/; Secure; HttpOnly; SameSite=Strict",
             ctx.token
-        ))
-    {
-        resp.headers_mut().insert(header::SET_COOKIE, v);
+        )) {
+            r.headers_mut().insert(header::SET_COOKIE, v);
+        }
+        return harden(r, &csp);
     }
-    harden(resp, &csp)
+    harden(next.run(req).await, &csp)
 }
 
 // ---- handlers ----

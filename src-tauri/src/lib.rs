@@ -58,6 +58,7 @@ pub fn run() {
             commands::training_clear,
             control::control_status,
             control::control_arm,
+            control::commissioner_unlock,
             control::control_disarm,
             control::control_preview,
             control::control_confirm,

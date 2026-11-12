@@ -6,7 +6,6 @@ use crate::profile::Profile;
 use crate::protocol::pdu::{MAX_READ_BITS, MAX_READ_REGISTERS};
 use crate::protocol::rtu::{RtuTiming, SerialSettings};
 use serde::{Deserialize, Serialize};
-use std::net::IpAddr;
 use thiserror::Error;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -63,14 +62,6 @@ impl LinkConfig {
 
     pub fn is_simulator(&self) -> bool {
         matches!(self.kind, LinkKind::Simulator { .. })
-    }
-
-    /// A TCP link whose host is a loopback IP literal (the training TCP server).
-    pub fn is_loopback_tcp(&self) -> bool {
-        match &self.kind {
-            LinkKind::Tcp { host, .. } => host.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback()),
-            _ => false,
-        }
     }
 
     /// Maximum unit ID allowed for this link (247 on serial lines, 255 on TCP).

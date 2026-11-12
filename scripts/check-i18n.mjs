@@ -62,7 +62,7 @@ const families = {
   "wiz.step.": ["journal", "arm", "confirm", "send", "reconnect", "verify"],
   "wiz.": ["arm", "preview", "cancel", "power_cycled", "reconnect", "verify", "close", "revert"],
   "audit.col.": ["time", "event", "user", "device", "register", "values", "frames", "result", "note"],
-  "audit.event.": ["arm", "disarm", "arm_expired", "preview", "confirm", "cancel", "sent", "result", "rejected", "journal", "verify", "feedback", "none"],
+  "audit.event.": ["arm", "disarm", "arm_expired", "preview", "confirm", "cancel", "sent", "result", "rejected", "journal", "verify", "feedback", "role_unlock", "none"],
   "audit.export.": ["csv", "xlsx"],
 };
 for (const [prefix, items] of Object.entries(families)) {

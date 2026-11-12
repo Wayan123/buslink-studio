@@ -8,8 +8,8 @@
 
 use crate::state::AppState;
 use buslink_core::command::commission::Wizard;
-use buslink_core::command::control::{Control, ControlStatus};
-use buslink_core::command::{CommSettingKind, CommandOutcome, CommandRequest, DisarmReason, Preview, Role};
+use buslink_core::command::control::{ArmRequest, Control, ControlStatus};
+use buslink_core::command::{CommSettingKind, CommandOutcome, CommandRequest, DisarmReason, Preview};
 use buslink_core::export::report::ReportData;
 use buslink_core::historian::AuditRow;
 use buslink_core::session::{ExportFormat, Session};
@@ -53,20 +53,22 @@ pub async fn control_status(state: State<'_, AppState>) -> R<ControlStatus> {
     blocking(Arc::clone(&state.control), |c| Ok(c.status())).await
 }
 
-#[derive(Deserialize)]
-pub struct ArmReq {
-    device_id: String,
-    user: String,
-    role: Role,
+/// Arm for one device as `Operator`. The request has no role (a forged `role` is
+/// refused by `ArmRequest`); this is a single-user local app, so the role is an
+/// interlock and not authentication.
+#[tauri::command]
+pub async fn control_arm(state: State<'_, AppState>, req: ArmRequest) -> R<ControlStatus> {
+    blocking(Arc::clone(&state.control), move |c| {
+        c.arm(&req.device_id, &req.user).map_err(|e| e.to_string())
+    })
+    .await
 }
 
+/// Separate, audited host action: raise the armed operator to commissioner until the arm ends.
 #[tauri::command]
-pub async fn control_arm(state: State<'_, AppState>, req: ArmReq) -> R<ControlStatus> {
-    if req.role == Role::Viewer {
-        return Err("a viewer cannot arm control".into());
-    }
+pub async fn commissioner_unlock(state: State<'_, AppState>, device_id: String) -> R<ControlStatus> {
     blocking(Arc::clone(&state.control), move |c| {
-        c.arm(&req.device_id, &req.user, req.role).map_err(|e| e.to_string())
+        c.commissioner_unlock(&device_id).map_err(|e| e.to_string())
     })
     .await
 }

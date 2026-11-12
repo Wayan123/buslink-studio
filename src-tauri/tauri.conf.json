@@ -8,6 +8,7 @@
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "npm run build",
+    "beforeBundleCommand": "node scripts/check-release-features.mjs --artifact --optional src-tauri/target/release/buslink-studio.exe",
     "frontendDist": "../dist"
   },
   "app": {

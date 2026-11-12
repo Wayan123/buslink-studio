@@ -22,6 +22,8 @@ pub enum AuditEvent {
     Verify,
     /// Process feedback resolved (reached / not reached / unavailable).
     Feedback,
+    /// The armed operator was raised to commissioner by a host action.
+    RoleUnlock,
 }
 
 impl AuditEvent {
@@ -39,6 +41,7 @@ impl AuditEvent {
             AuditEvent::Journal => "journal",
             AuditEvent::Verify => "verify",
             AuditEvent::Feedback => "feedback",
+            AuditEvent::RoleUnlock => "role_unlock",
         }
     }
 }

@@ -500,6 +500,7 @@ fn vfd_target(link: &buslink_core::device::LinkConfig, unit: u8) -> CommandTarge
     d.unit_id = unit;
     CommandTarget {
         device: d,
+        session_simulator: link.is_simulator(),
         link: link.clone(),
         profile: p,
     }

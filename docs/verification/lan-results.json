@@ -1,5 +1,5 @@
 {
-  "date": "2026-11-12T14:47:09.025Z",
+  "date": "2026-11-12T15:18:36.420Z",
   "platform": "Windows (WebView2 in the e2e build) + a second headless Chrome as the LAN browser",
   "steps": [
     {
@@ -45,12 +45,27 @@
     {
       "name": "certificate fingerprint is shown (SHA-256)",
       "ok": true,
-      "detail": "96:6C:81:2F:BE:F5:AC:53:7E:2E:A8:2E:26:28:7D:22:12:CC:0B:20:B9:EF:88:41:49:7F:B4:8C:5D:05:27:1F"
+      "detail": "7A:79:CF:AA:B0:E4:16:A4:5B:26:56:FD:CF:30:C6:25:0F:04:36:86:61:48:8D:35:16:56:FC:8B:49:4E:9F:E9"
     },
     {
       "name": "header shows that the network view is on",
       "ok": true,
       "detail": ""
+    },
+    {
+      "name": "the token is in exactly one request: GET / answered 303 to /",
+      "ok": true,
+      "detail": "[{\"url\":\"https://192.168.100.77:8443/?t=<token>\",\"tokenInUrl\":true,\"status\":303,\"method\":\"GET\",\"location\":\"/\"}]"
+    },
+    {
+      "name": "the address bar no longer holds the token",
+      "ok": true,
+      "detail": "https://192.168.100.77:8443/"
+    },
+    {
+      "name": "location.search and referrer are token-free",
+      "ok": true,
+      "detail": "{\"href\":\"https://192.168.100.77:8443/\",\"search\":\"\",\"referrerHasToken\":false}"
     },
     {
       "name": "server selects the read-only build (meta buslink-mode=lan)",
@@ -80,7 +95,12 @@
     {
       "name": "tiles carry value, unit, quality and age",
       "ok": true,
-      "detail": "Process temperature (PV)25.0 °C-50300age 515 ms · cycle 1 s"
+      "detail": "Process temperature (PV)25.0 °C-50300age 580 ms · cycle 1 s"
+    },
+    {
+      "name": "the stream and API requests carried no token in their URLs",
+      "ok": true,
+      "detail": "1 request(s) with ?t="
     },
     {
       "name": "navigation is overview + trends only",
@@ -108,6 +128,11 @@
       "detail": "401, 401"
     },
     {
+      "name": "the right token in the URL is refused on API and asset routes (cookie only)",
+      "ok": true,
+      "detail": "401, 401"
+    },
+    {
       "name": "the app lists the connected viewer",
       "ok": true,
       "detail": ""
@@ -130,12 +155,12 @@
     {
       "name": "browser trend shows the gap 'No data: TIMEOUT'",
       "ok": true,
-      "detail": "Simulated temperature controller (simulated): Process temperature (PV) — No data: TIMEOUT · 21:47:13–21:47:15 | Simulated temperature controller (simulated): Setpoint (SP) — No data: TIMEOUT · 21:47:13–21:47:15"
+      "detail": "Simulated temperature controller (simulated): Process temperature (PV) — No data: TIMEOUT · 22:18:39–22:18:41 | Simulated temperature controller (simulated): Setpoint (SP) — No data: TIMEOUT · 22:18:39–22:18:41"
     },
     {
       "name": "1 h history comes from GET /api/trend (decimated on the host)",
       "ok": true,
-      "detail": "https://192.168.100.77:8443/api/trend?tag=sim-temp-controller-basic-u3%2Fpv&from=1794491235359&to=1794494835359&buckets=942&t=<token>"
+      "detail": "https://192.168.100.77:8443/api/trend?tag=sim-temp-controller-basic-u3%2Fpv&from=1794493121423&to=1794496721423&buckets=942"
     },
     {
       "name": "LAN view at 360 px: no horizontal page scroll",
@@ -187,7 +212,7 @@
     "GET /api/command": 404
   },
   "summary": {
-    "passed": 33,
+    "passed": 38,
     "failed": 0
   }
 }

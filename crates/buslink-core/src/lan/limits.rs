@@ -3,6 +3,132 @@
 
 use std::collections::HashMap;
 use std::net::IpAddr;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+
+/// Connection caps (security review 07, L3). A LAN host that holds idle connections
+/// must not be able to starve viewers who have the token.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ConnLimits {
+    /// All open connections.
+    pub max_total: usize,
+    /// Open connections from one address.
+    pub per_ip: usize,
+    /// Connections that have not yet sent one request with a valid token. They have
+    /// their own pool, so a flood of them cannot take the slots authenticated viewers use.
+    pub max_unauthenticated: usize,
+}
+
+impl ConnLimits {
+    pub fn new(max_total: usize) -> Self {
+        let max_total = max_total.max(1);
+        Self {
+            max_total,
+            per_ip: 4,
+            max_unauthenticated: (max_total / 4).max(1),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Refusal {
+    Total,
+    PerIp,
+    Unauthenticated,
+}
+
+#[derive(Default)]
+struct ConnCounts {
+    total: usize,
+    unauthenticated: usize,
+    per_ip: HashMap<IpAddr, usize>,
+}
+
+/// Counts open connections. [`ConnTracker::admit`] hands out a guard that gives the slot back on drop.
+pub struct ConnTracker {
+    limits: ConnLimits,
+    counts: Mutex<ConnCounts>,
+}
+
+/// One admitted connection. Starts unauthenticated; the first request with a valid token moves it
+/// to the authenticated pool (which is only bounded by the total and per-address caps).
+pub struct ConnGuard {
+    tracker: Arc<ConnTracker>,
+    ip: IpAddr,
+    authenticated: AtomicBool,
+}
+
+impl ConnTracker {
+    pub fn new(limits: ConnLimits) -> Arc<Self> {
+        Arc::new(Self {
+            limits,
+            counts: Mutex::new(ConnCounts::default()),
+        })
+    }
+
+    fn counts(&self) -> std::sync::MutexGuard<'_, ConnCounts> {
+        self.counts.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    pub fn admit(self: &Arc<Self>, ip: IpAddr) -> Result<Arc<ConnGuard>, Refusal> {
+        let mut c = self.counts();
+        if c.total >= self.limits.max_total {
+            return Err(Refusal::Total);
+        }
+        if c.per_ip.get(&ip).copied().unwrap_or(0) >= self.limits.per_ip {
+            return Err(Refusal::PerIp);
+        }
+        if c.unauthenticated >= self.limits.max_unauthenticated {
+            return Err(Refusal::Unauthenticated);
+        }
+        c.total += 1;
+        c.unauthenticated += 1;
+        *c.per_ip.entry(ip).or_insert(0) += 1;
+        drop(c);
+        Ok(Arc::new(ConnGuard {
+            tracker: Arc::clone(self),
+            ip,
+            authenticated: AtomicBool::new(false),
+        }))
+    }
+
+    /// `(total, unauthenticated)` open now.
+    pub fn open(&self) -> (usize, usize) {
+        let c = self.counts();
+        (c.total, c.unauthenticated)
+    }
+
+    pub fn open_from(&self, ip: IpAddr) -> usize {
+        self.counts().per_ip.get(&ip).copied().unwrap_or(0)
+    }
+}
+
+impl ConnGuard {
+    /// Called when a request on this connection carried a valid token.
+    pub fn mark_authenticated(&self) {
+        if !self.authenticated.swap(true, Ordering::AcqRel) {
+            let mut c = self.tracker.counts();
+            c.unauthenticated = c.unauthenticated.saturating_sub(1);
+        }
+    }
+}
+
+impl Drop for ConnGuard {
+    fn drop(&mut self) {
+        let authed = self.authenticated.load(Ordering::Acquire);
+        let mut c = self.tracker.counts();
+        c.total = c.total.saturating_sub(1);
+        if !authed {
+            c.unauthenticated = c.unauthenticated.saturating_sub(1);
+        }
+        if let Some(n) = c.per_ip.get_mut(&self.ip) {
+            *n = n.saturating_sub(1);
+            if *n == 0 {
+                c.per_ip.remove(&self.ip);
+            }
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug)]
 pub struct LimitConfig {
@@ -122,6 +248,49 @@ mod tests {
 
     fn ip(n: u8) -> IpAddr {
         IpAddr::from([192, 168, 1, n])
+    }
+
+    #[test]
+    fn per_address_and_unauthenticated_caps() {
+        let t = ConnTracker::new(ConnLimits {
+            max_total: 8,
+            per_ip: 2,
+            max_unauthenticated: 3,
+        });
+        let a1 = t.admit(ip(1)).unwrap();
+        let _a2 = t.admit(ip(1)).unwrap();
+        assert_eq!(t.admit(ip(1)).err(), Some(Refusal::PerIp), "one address is capped");
+        let _b1 = t.admit(ip(2)).unwrap();
+        // Three unauthenticated connections are open: a fourth address waits.
+        assert_eq!(t.admit(ip(3)).err(), Some(Refusal::Unauthenticated));
+        // A connection with a valid token leaves the unauthenticated pool...
+        a1.mark_authenticated();
+        a1.mark_authenticated(); // idempotent
+        assert_eq!(t.open(), (3, 2));
+        // ...so a viewer can connect even though the flood holds the rest of that pool.
+        let _c = t.admit(ip(3)).unwrap();
+        assert_eq!(t.admit(ip(4)).err(), Some(Refusal::Unauthenticated));
+        drop(a1);
+        assert_eq!(t.open_from(ip(1)), 1);
+        assert_eq!(t.open(), (3, 3));
+    }
+
+    #[test]
+    fn total_cap_and_release_on_drop() {
+        let t = ConnTracker::new(ConnLimits {
+            max_total: 2,
+            per_ip: 4,
+            max_unauthenticated: 2,
+        });
+        let g1 = t.admit(ip(1)).unwrap();
+        let g2 = t.admit(ip(2)).unwrap();
+        assert_eq!(t.admit(ip(3)).err(), Some(Refusal::Total));
+        g1.mark_authenticated();
+        drop(g1);
+        drop(g2);
+        assert_eq!(t.open(), (0, 0));
+        assert_eq!(t.open_from(ip(1)), 0);
+        assert!(t.admit(ip(3)).is_ok());
     }
 
     #[test]

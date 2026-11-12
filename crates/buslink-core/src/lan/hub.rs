@@ -5,7 +5,7 @@
 //! client gets a snapshot and its broadcast receiver under the same lock, so it
 //! can neither miss a frame nor see one older than its snapshot.
 
-use super::{LanSnapshot, LanSource, ProfileEntry};
+use super::{LanProfile, LanSnapshot, LanSource, ProfileEntry};
 use crate::bus::BusRecv;
 use crate::session::live::{MAX_POINTS_PER_FRAME, TagView, TrendPoint, tag_key, view_of};
 use crate::session::{LiveFrame, LiveSnapshot};
@@ -166,7 +166,7 @@ impl Hub {
                 .iter()
                 .map(|p| ProfileEntry {
                     key: p.key(),
-                    profile: (**p).clone(),
+                    profile: LanProfile::of(p),
                 })
                 .collect(),
         }

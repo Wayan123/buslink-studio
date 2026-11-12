@@ -28,10 +28,6 @@ export function isLan(): boolean {
   return document.querySelector('meta[name="buslink-mode"]')?.getAttribute("content") === "lan";
 }
 
-export function lanToken(search: string = typeof location === "undefined" ? "" : location.search): string {
-  return new URLSearchParams(search).get("t") ?? "";
-}
-
 /** Parse one WebSocket text message; anything unexpected is ignored (null). */
 export function parseMessage(text: string): StreamMessage | null {
   let v: unknown;
@@ -57,15 +53,16 @@ export function backoffMs(attempt: number): number {
   return Math.min(15_000, 1000 * 2 ** Math.max(0, Math.min(attempt, 10)));
 }
 
-export function query(token: string, params: Record<string, string | number> = {}): string {
+/** Query string for an API call. The session cookie authenticates; the token is never put in a URL. */
+export function query(params: Record<string, string | number> = {}): string {
   const q = new URLSearchParams();
   for (const [k, v] of Object.entries(params)) q.set(k, String(v));
-  q.set("t", token);
-  return `?${q.toString()}`;
+  const s = q.toString();
+  return s ? `?${s}` : "";
 }
 
 async function get<T>(path: string, params: Record<string, string | number> = {}): Promise<T> {
-  const res = await fetch(`${path}${query(lanToken(), params)}`, { method: "GET", credentials: "same-origin", cache: "no-store" });
+  const res = await fetch(`${path}${query(params)}`, { method: "GET", credentials: "same-origin", cache: "no-store" });
   if (!res.ok) throw new Error(`${res.status} ${await res.text().catch(() => "")}`.trim());
   return (await res.json()) as T;
 }
@@ -96,7 +93,7 @@ export function lanStream(h: StreamHandlers): { close: () => void } {
     if (closed) return;
     h.onState(attempt === 0 ? "connecting" : "reconnecting");
     const scheme = location.protocol === "https:" ? "wss:" : "ws:";
-    ws = new WebSocket(`${scheme}//${location.host}/api/stream${query(lanToken())}`);
+    ws = new WebSocket(`${scheme}//${location.host}/api/stream`);
     ws.onopen = () => {
       attempt = 0;
       h.onState("live");

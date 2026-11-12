@@ -267,6 +267,7 @@ fn target(file: &str) -> CommandTarget {
     let (d, p) = device(file, &link, 1000);
     CommandTarget {
         device: d,
+        session_simulator: link.is_simulator(),
         link,
         profile: p,
     }
@@ -506,6 +507,7 @@ fn command_through_the_link_worker_with_audit_in_the_historian() {
     svc.arm(
         CommandTarget {
             device: d,
+            session_simulator: link.is_simulator(),
             link,
             profile: p,
         },

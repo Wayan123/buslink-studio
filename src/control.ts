@@ -53,6 +53,15 @@ export function ackKey(a: Ack | null | undefined): string {
   return `ctl.ack.${a.kind}`;
 }
 
+/** Same rule as the host: trimmed, 1-64 characters, no control characters. Returns the clean name or null. */
+export function cleanUser(raw: string): string | null {
+  const u = raw.trim();
+  if (u.length === 0 || [...u].length > 64) return null;
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f-\u009f]/.test(u)) return null;
+  return u;
+}
+
 /** Whole seconds left, never negative: "Armed: control enabled for 52 s". */
 export function secondsLeft(ms: number | null | undefined): number {
   if (ms === null || ms === undefined || ms <= 0) return 0;

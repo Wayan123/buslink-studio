@@ -348,7 +348,7 @@
   "ctl.armed_other": "Kontrol sedang di-arm untuk perangkat lain: {device}. Lepaskan dulu.",
   "ctl.user": "Nama Anda",
   "ctl.role": "Peran",
-  "ctl.role.hint": "Pilihan lokal, dicatat di log audit. Rilis ini belum memiliki login.",
+  "ctl.role.hint": "Aplikasi lokal satu pengguna: tidak ada login. Peran adalah interlock keselamatan, bukan autentikasi. Commissioner adalah pembukaan terpisah setelah arming, dicatat di log audit, dan berakhir bersama arm.",
   "ctl.role.operator": "Operator",
   "ctl.role.commissioner": "Commissioner",
   "ctl.arm": "Arm kontrol untuk perangkat ini",
@@ -370,7 +370,7 @@
   "ctl.commands": "Perintah",
   "ctl.bounds": "Diizinkan {min} sampai {max}, langkah {step}. Nilai di luar ditolak, tidak pernah dipotong.",
   "ctl.sets": "Mengatur {reg} = {value}",
-  "ctl.err.user": "Isi nama Anda; nama dicatat di log audit.",
+  "ctl.err.user": "Isi nama Anda (1-64 karakter, tanpa karakter kontrol); nama dicatat di log audit.",
   "ctl.err.not_number": "Isi dengan angka.",
   "ctl.err.range": "Di luar {min} sampai {max}. Nilai ditolak, tidak dipotong.",
   "ctl.err.step": "Bukan kelipatan langkah {step}.",
@@ -453,7 +453,7 @@
   "wiz.new_unit": "Unit ID baru",
   "wiz.new_unit.hint": "1 sampai 247; tidak dipakai perangkat lain di link ini. 0 (broadcast) tidak pernah ditulis.",
   "wiz.new_baud": "Baud rate baru",
-  "wiz.user.hint": "Dicatat dengan peran commissioner di jurnal dan log audit.",
+  "wiz.user.hint": "Dicatat di jurnal dan log audit. Arming untuk wizard juga membuka peran commissioner sampai arm berakhir. Tanpa login: peran adalah interlock keselamatan.",
   "wiz.baud_note": "Perubahan baud berlaku untuk seluruh link RS485: perangkat lain di link itu berhenti menjawab sampai memakai baud yang sama.",
   "wiz.err.unit": "Isi bilangan bulat 1 sampai 247.",
   "wiz.start": "Catat jurnal dan mulai",
@@ -662,5 +662,8 @@
   "mqtt.stat.reconnects": "Sambung ulang",
   "mqtt.stat.last_ack": "Konfirmasi terakhir",
   "mqtt.stat.last_error": "Kesalahan terakhir",
-  "mqtt.none": "belum ada"
+  "mqtt.none": "belum ada",
+  "ctl.announce.unlocked": "Fungsi commissioner dibuka untuk {device}",
+  "ctl.monitor_only": "hanya pemantauan. Kontrol hanya berlaku pada tautan simulator Pelatihan, bukan alamat TCP yang diketik manual (termasuk 127.0.0.1).",
+  "audit.event.role_unlock": "Pembukaan commissioner"
 }

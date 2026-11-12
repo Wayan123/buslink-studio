@@ -1,7 +1,7 @@
 // Control panel helpers (commissioning-control Req 2.3, 2.4). Run with `node --test`.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { actionLabel, ackKey, checkBounds, commandRuns, filterAudit, secondsLeft, splitCommands } from "./control.ts";
+import { actionLabel, ackKey, checkBounds, cleanUser, commandRuns, filterAudit, secondsLeft, splitCommands } from "./control.ts";
 import type { AuditRow, ProfileCommand, Register } from "./types.ts";
 
 const sp: Register = {
@@ -79,4 +79,12 @@ test("audit filter and command runs for the report", () => {
   assert.deepEqual(filterAudit(rows, { device: "", event: "", text: "0b b8" }).map((r) => r.id), [3]);
   const runs = commandRuns(rows);
   assert.deepEqual(runs.map((r) => [r.result.command_id, r.feedback?.readback ?? null]), [["run", null], ["set_frequency", "reached"]]);
+});
+
+test("cleanUser mirrors the host rule: trim, 1-64 characters, no control characters", () => {
+  assert.equal(cleanUser("  tech 1 "), "tech 1");
+  assert.equal(cleanUser("   "), null);
+  assert.equal(cleanUser("a".repeat(64)), "a".repeat(64));
+  assert.equal(cleanUser("a".repeat(65)), null);
+  for (const bad of ["a\nb", "a\tb", "a\u0000b", "\u007fx", "a\u001b[31m"]) assert.equal(cleanUser(bad), null, JSON.stringify(bad));
 });

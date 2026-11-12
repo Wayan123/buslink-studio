@@ -1,7 +1,8 @@
 //! Accept loop: TLS, HTTP/1.1 with upgrades, a connection limit, and a shutdown
 //! that drops every connection task.
 
-use super::routes::{ClientAddr, Ctx, router};
+use super::limits::{ConnLimits, ConnTracker};
+use super::routes::{ClientAddr, ConnHandle, Ctx, router};
 use axum::Router;
 use hyper::server::conn::http1;
 use hyper_util::rt::{TokioIo, TokioTimer};
@@ -10,7 +11,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 use tokio::net::TcpListener;
-use tokio::sync::{Semaphore, watch};
+use tokio::sync::watch;
 use tokio::task::JoinSet;
 use tokio_rustls::TlsAcceptor;
 
@@ -22,11 +23,11 @@ pub(crate) async fn run(
     listener: TcpListener,
     acceptor: TlsAcceptor,
     ctx: Arc<Ctx>,
-    max_connections: usize,
+    conn_limits: ConnLimits,
     mut shutdown: watch::Receiver<bool>,
 ) {
     let app: Router = router(Arc::clone(&ctx));
-    let permits = Arc::new(Semaphore::new(max_connections.max(1)));
+    let tracker = ConnTracker::new(conn_limits);
     let mut conns: JoinSet<()> = JoinSet::new();
     loop {
         tokio::select! {
@@ -35,15 +36,21 @@ pub(crate) async fn run(
             Some(_) = conns.join_next(), if !conns.is_empty() => {}
             accepted = listener.accept() => {
                 let Ok((sock, peer)) = accepted else { continue };
-                let Ok(permit) = Arc::clone(&permits).try_acquire_owned() else {
-                    ctx.stats.refused_connections.fetch_add(1, Ordering::Relaxed);
-                    drop(sock);
-                    continue;
+                let conn = match tracker.admit(peer.ip()) {
+                    Ok(c) => c,
+                    Err(_) => {
+                        ctx.stats.refused_connections.fetch_add(1, Ordering::Relaxed);
+                        drop(sock);
+                        continue;
+                    }
                 };
                 let acceptor = acceptor.clone();
-                let app = app.clone().layer(axum::Extension(ClientAddr(peer)));
+                let app = app
+                    .clone()
+                    .layer(axum::Extension(ClientAddr(peer)))
+                    .layer(axum::Extension(ConnHandle(Arc::clone(&conn))));
                 conns.spawn(async move {
-                    let _permit = permit;
+                    let _conn = conn;
                     let _ = sock.set_nodelay(true);
                     let Ok(Ok(tls)) = tokio::time::timeout(HANDSHAKE_TIMEOUT, acceptor.accept(sock)).await else {
                         return;

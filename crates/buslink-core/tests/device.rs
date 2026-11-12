@@ -76,9 +76,6 @@ fn stale_threshold_and_owner_keys() {
         rtu_link("b").owner_key(),
         "same COM port = same bus"
     );
-    assert!(tcp_link("x", "127.0.0.1").is_loopback_tcp());
-    assert!(!tcp_link("x", "192.168.1.10").is_loopback_tcp());
-    assert!(!tcp_link("x", "localhost.evil.example").is_loopback_tcp());
 }
 
 #[test]
