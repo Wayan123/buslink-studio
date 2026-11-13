@@ -1,7 +1,7 @@
 ---
 title: BusLink Studio
 subtitle: Manual Pengguna dan Teknis
-version: 0.1.0
+version: 0.1.1
 date: 13 November 2026
 repo: https://github.com/Wayan123/buslink-studio
 img: img/id
@@ -40,7 +40,7 @@ Manual ini terdiri dari dua bagian:
 
 ### 1.1 Windows
 
-1. Unduh `BusLink-Studio_0.1.0_x64-setup.exe` dari halaman rilis GitHub (<https://github.com/Wayan123/buslink-studio/releases/latest>). Anda dapat mencocokkan file dengan `SHA256SUMS.txt` di halaman yang sama.
+1. Unduh `BusLink-Studio_0.1.1_x64-setup.exe` dari halaman rilis GitHub (<https://github.com/Wayan123/buslink-studio/releases/latest>). Anda dapat mencocokkan file dengan `SHA256SUMS.txt` di halaman yang sama.
 2. Jalankan installer. Installer belum ditandatangani, sehingga Windows SmartScreen dapat menampilkan "Windows protected your PC". Pilih **More info → Run anyway**.
 3. Buka **BusLink Studio** dari menu Start.
 

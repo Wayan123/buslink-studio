@@ -1,7 +1,7 @@
 ---
 title: BusLink Studio
 subtitle: User and Technical Manual
-version: 0.1.0
+version: 0.1.1
 date: 13 November 2026
 repo: https://github.com/Wayan123/buslink-studio
 img: img
@@ -40,7 +40,7 @@ This manual has two parts:
 
 ### 1.1 Windows
 
-1. Download `BusLink-Studio_0.1.0_x64-setup.exe` from the GitHub release page (<https://github.com/Wayan123/buslink-studio/releases/latest>). You can check the file against `SHA256SUMS.txt` on the same page.
+1. Download `BusLink-Studio_0.1.1_x64-setup.exe` from the GitHub release page (<https://github.com/Wayan123/buslink-studio/releases/latest>). You can check the file against `SHA256SUMS.txt` on the same page.
 2. Run the installer. It is not signed yet, so Windows SmartScreen may show "Windows protected your PC". Choose **More info → Run anyway**.
 3. Start **BusLink Studio** from the Start menu.
 

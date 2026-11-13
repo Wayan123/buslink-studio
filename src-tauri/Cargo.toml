@@ -1,6 +1,6 @@
 [package]
 name = "buslink-studio"
-version = "0.1.0"
+version = "0.1.1"
 description = "BusLink Studio: Modbus RTU/TCP workbench (Windows, Android, LAN view)"
 edition = "2024"
 rust-version = "1.90"
