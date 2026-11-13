@@ -182,6 +182,10 @@ fn options(
     o.set_connection_timeout(CONNECT_TIMEOUT_S);
     o.set_request_channel_capacity(REQUEST_CAPACITY);
     if let Some(t) = tls {
+        // Always `TlsConfiguration::Rustls` with our own ClientConfig (verification in
+        // rustls 0.23.46 / webpki 0.103.16). Never `Simple`: that is the only rumqttc
+        // path that uses its pinned rustls-webpki 0.102.8 / rustls-pemfile (see
+        // docs/security/dependency-audit.md).
         o.set_transport(Transport::tls_with_config(TlsConfiguration::Rustls(t)));
     }
     if !cfg.username.is_empty() {
